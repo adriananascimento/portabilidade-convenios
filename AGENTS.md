@@ -32,6 +32,16 @@ O objetivo é construir uma aplicação funcional, segura, testável e de fácil
 - Não adicionar dependências sem justificativa.
 - Não modificar funcionalidades não relacionadas à tarefa solicitada.
 
+## Organização de pacotes
+
+- Organizar o código Java por camadas de responsabilidade (package by layer).
+- Utilizar os pacotes `controller`, `service`, `repository`, `entity`, `dto` e `converter`, conforme a necessidade.
+- Manter enums de domínio próximos às entidades relacionadas.
+- Criar novos pacotes apenas quando houver uma responsabilidade clara que justifique sua existência.
+- Não agrupar Controller, Service, Repository, Entity e DTO no mesmo pacote.
+- Manter essa organização de forma consistente em todas as aplicações Java do repositório.
+- Para os testes, organizar por feature na estrutura package by feature.
+
 ## Orientações para agentes de IA
 
 - Executar somente o escopo solicitado.
