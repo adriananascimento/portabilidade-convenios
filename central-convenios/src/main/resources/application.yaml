@@ -19,3 +19,9 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+central:
+  processamento:
+    habilitado: true
+    intervalo: PT5S
+    atraso-minimo: PT10S

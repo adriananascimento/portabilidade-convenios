@@ -1,5 +1,5 @@
 package br.com.central.convenios.entity;
 
 public enum StatusOperacao {
-    PENDENTE
+    PENDENTE, CONFIRMADA, REJEITADA
 }

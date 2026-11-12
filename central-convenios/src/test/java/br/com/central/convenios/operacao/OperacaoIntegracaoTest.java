@@ -1,6 +1,12 @@
 package br.com.central.convenios.operacao;
 
 import br.com.central.convenios.BaseCentralConveniosTest;
+import br.com.central.convenios.service.ProcessamentoOperacaoService;
+import java.time.*;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Import;
 import java.net.URI;
 import java.net.http.*;
 import java.util.*;
@@ -12,8 +18,21 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Import(OperacaoIntegracaoTest.ConfiguracaoTemporal.class)
 class OperacaoIntegracaoTest extends BaseCentralConveniosTest {
+    private static final OffsetDateTime AGORA = OffsetDateTime.parse("2040-06-15T12:00:00Z");
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class ConfiguracaoTemporal {
+        @Bean @Primary
+        Clock relogioOperacoes() {
+            return Clock.fixed(AGORA.toInstant(), ZoneOffset.UTC);
+        }
+    }
+
+    @Autowired ProcessamentoOperacaoService processamento;
     @LocalServerPort int porta;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
@@ -178,4 +197,207 @@ class OperacaoIntegracaoTest extends BaseCentralConveniosTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM operacoes_parcelas WHERE parcela_id = ?",
                 Integer.class, beneficiario + "-1")).isEqualTo(1);
     }
+    private HttpResponse<String> consultar(UUID protocolo) throws Exception {
+        return cliente.send(HttpRequest.newBuilder(URI.create("http://localhost:" + porta
+                + "/operacoes-portabilidade/" + protocolo)).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void deveConsultarOperacaoPendenteSemAlterarEstado() throws Exception {
+        var beneficiario = preparar("ATIVA");
+        var criada = enviar(UUID.randomUUID().toString(), corpo(beneficiario));
+        var protocolo = UUID.fromString(mapper.readTree(criada.body()).get("protocolo").asText());
+        for (int i = 0; i < 2; i++) {
+            var resposta = consultar(protocolo);
+            assertThat(resposta.statusCode()).isEqualTo(200);
+            var json = mapper.readTree(resposta.body());
+            assertThat(json.size()).isEqualTo(5);
+            assertThat(json.get("protocolo").asText()).isEqualTo(protocolo.toString());
+            assertThat(json.get("status").asText()).isEqualTo("PENDENTE");
+            assertThat(json.get("dataCriacao").asText()).isNotBlank();
+            assertThat(json.get("dataProcessamento").isNull()).isTrue();
+            assertThat(json.get("motivoRejeicao").isNull()).isTrue();
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM operacoes_portabilidade WHERE protocolo = ?",
+                String.class, protocolo)).isEqualTo("PENDENTE");
+    }
+
+    @Test
+    void deveRetornar404ParaProtocoloInexistente() throws Exception {
+        assertThat(consultar(UUID.randomUUID()).statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void deveConsultarOperacoesFinalizadas() throws Exception {
+        for (String status : List.of("CONFIRMADA", "REJEITADA")) {
+            var beneficiario = preparar("ATIVA");
+            var criada = enviar(UUID.randomUUID().toString(), corpo(beneficiario));
+            var protocolo = UUID.fromString(mapper.readTree(criada.body()).get("protocolo").asText());
+            String motivo = status.equals("REJEITADA") ? "Autorização inativa" : null;
+            jdbc.update("UPDATE operacoes_portabilidade SET status = ?, data_processamento = CURRENT_TIMESTAMP, "
+                    + "motivo_rejeicao = ? WHERE protocolo = ?", status, motivo, protocolo);
+            var resposta = consultar(protocolo);
+            assertThat(resposta.statusCode()).isEqualTo(200);
+            var json = mapper.readTree(resposta.body());
+            assertThat(json.get("status").asText()).isEqualTo(status);
+            assertThat(json.get("dataProcessamento").asText()).isNotBlank();
+            if (motivo == null) assertThat(json.get("motivoRejeicao").isNull()).isTrue();
+            else assertThat(json.get("motivoRejeicao").asText()).isEqualTo(motivo);
+        }
+    }
+
+    private UUID registrar(String chave, String beneficiario) throws Exception {
+        var resposta = enviar(chave, corpo(beneficiario));
+        assertThat(resposta.statusCode()).isEqualTo(202);
+        return UUID.fromString(mapper.readTree(resposta.body()).get("protocolo").asText());
+    }
+
+    private void aguardarElegibilidade(UUID protocolo) {
+        // Avança o instante persistido de criação, sem esperar o agendador ou tempo real.
+        jdbc.update("UPDATE operacoes_portabilidade SET data_criacao = ? WHERE protocolo = ?",
+                AGORA.minusSeconds(10), protocolo);
+    }
+
+    private int reservas(UUID protocolo) {
+        return jdbc.queryForObject("SELECT count(*) FROM reservas_parcelas WHERE operacao_protocolo = ?",
+                Integer.class, protocolo);
+    }
+
+    private int parcelasNaAgenda(String beneficiario) throws Exception {
+        var resposta = cliente.send(HttpRequest.newBuilder(URI.create("http://localhost:" + porta
+                + "/beneficiarios/" + beneficiario + "/agenda")).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(resposta.statusCode()).isEqualTo(200);
+        return mapper.readTree(resposta.body()).get("parcelas").size();
+    }
+
+    @Test
+    void deveRespeitarAtrasoEConfirmarPeloProcessamentoDePendentes() throws Exception {
+        var beneficiario = preparar("ATIVA");
+        var chave = UUID.randomUUID().toString();
+        assertThat(parcelasNaAgenda(beneficiario)).isEqualTo(2);
+        var protocolo = registrar(chave, beneficiario);
+        assertThat(reservas(protocolo)).isEqualTo(2);
+        assertThat(parcelasNaAgenda(beneficiario)).isZero();
+        assertThat(processamento.processar(protocolo)).isFalse();
+        processamento.processarPendentes();
+        assertThat(mapper.readTree(consultar(protocolo).body()).get("status").asText()).isEqualTo("PENDENTE");
+        aguardarElegibilidade(protocolo);
+        processamento.processarPendentes();
+        var json = mapper.readTree(consultar(protocolo).body());
+        assertThat(json.get("status").asText()).isEqualTo("CONFIRMADA");
+        assertThat(OffsetDateTime.parse(json.get("dataProcessamento").asText())).isEqualTo(AGORA);
+        assertThat(json.get("motivoRejeicao").isNull()).isTrue();
+        assertThat(reservas(protocolo)).isEqualTo(2);
+        assertThat(parcelasNaAgenda(beneficiario)).isZero();
+        assertThat(enviar(UUID.randomUUID().toString(), corpo(beneficiario)).statusCode()).isEqualTo(409);
+        var repetida = enviar(chave, corpo(beneficiario));
+        assertThat(repetida.statusCode()).isEqualTo(202);
+        assertThat(mapper.readTree(repetida.body()).get("protocolo").asText()).isEqualTo(protocolo.toString());
+        assertThat(mapper.readTree(repetida.body()).get("status").asText()).isEqualTo("CONFIRMADA");
+        jdbc.update("UPDATE autorizacoes SET status = 'REVOGADA' WHERE beneficiario_id = ?", beneficiario);
+        assertThat(processamento.processar(protocolo)).isFalse();
+        assertThat(mapper.readTree(consultar(protocolo).body())).isEqualTo(json);
+        assertThat(reservas(protocolo)).isEqualTo(2);
+        assertThat(quantidade(beneficiario)).isEqualTo(1);
+    }
+
+    @Test
+    void deveRejeitarLiberarReservasEPreservarHistoricoEIdempotencia() throws Exception {
+        var beneficiario = preparar("ATIVA");
+        var chave = UUID.randomUUID().toString();
+        var protocolo = registrar(chave, beneficiario);
+        aguardarElegibilidade(protocolo);
+        jdbc.update("UPDATE autorizacoes SET status = 'REVOGADA' WHERE beneficiario_id = ?", beneficiario);
+        assertThat(processamento.processar(protocolo)).isTrue();
+        var rejeitada = consultar(protocolo).body();
+        var json = mapper.readTree(rejeitada);
+        assertThat(json.get("status").asText()).isEqualTo("REJEITADA");
+        assertThat(OffsetDateTime.parse(json.get("dataProcessamento").asText())).isEqualTo(AGORA);
+        assertThat(json.get("motivoRejeicao").asText()).isEqualTo("Beneficiário sem autorização ativa");
+        assertThat(reservas(protocolo)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM operacoes_parcelas WHERE operacao_protocolo = ?",
+                Integer.class, protocolo)).isEqualTo(2);
+        assertThat(parcelasNaAgenda(beneficiario)).isZero();
+        jdbc.update("UPDATE autorizacoes SET status = 'ATIVA' WHERE beneficiario_id = ?", beneficiario);
+        assertThat(parcelasNaAgenda(beneficiario)).isEqualTo(2);
+        assertThat(processamento.processar(protocolo)).isFalse();
+        assertThat(consultar(protocolo).body()).isEqualTo(rejeitada);
+        var repetida = enviar(chave, corpo(beneficiario));
+        assertThat(repetida.statusCode()).isEqualTo(202);
+        assertThat(mapper.readTree(repetida.body()).get("status").asText()).isEqualTo("REJEITADA");
+        assertThat(mapper.readTree(repetida.body()).get("protocolo").asText()).isEqualTo(protocolo.toString());
+        assertThat(reservas(protocolo)).isZero();
+        var nova = registrar(UUID.randomUUID().toString(), beneficiario);
+        assertThat(nova).isNotEqualTo(protocolo);
+        assertThat(reservas(nova)).isEqualTo(2);
+        assertThat(parcelasNaAgenda(beneficiario)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM operacoes_parcelas WHERE parcela_id = ?",
+                Integer.class, beneficiario + "-1")).isEqualTo(2);
+        assertThat(enviar(chave, corpo(beneficiario, List.of(beneficiario + "-1"), "outra")).statusCode()).isEqualTo(409);
+    }
+
+    @Test
+    void deveRejeitarSeParcelaVencerAntesDoProcessamento() throws Exception {
+        var beneficiario = preparar("ATIVA");
+        var protocolo = registrar(UUID.randomUUID().toString(), beneficiario);
+        aguardarElegibilidade(protocolo);
+        jdbc.update("UPDATE parcelas SET data_desconto = ? WHERE id = ?", AGORA.toLocalDate().minusDays(1), beneficiario + "-1");
+        assertThat(processamento.processar(protocolo)).isTrue();
+        var json = mapper.readTree(consultar(protocolo).body());
+        assertThat(json.get("status").asText()).isEqualTo("REJEITADA");
+        assertThat(json.get("motivoRejeicao").asText()).isEqualTo("Parcela indisponível para portabilidade");
+        assertThat(reservas(protocolo)).isZero();
+        assertThat(parcelasNaAgenda(beneficiario)).isEqualTo(1);
+    }
+
+    @Test
+    void deveProcessarUmaUnicaVezSobConcorrencia() throws Exception {
+        var beneficiario = preparar("ATIVA");
+        var protocolo = registrar(UUID.randomUUID().toString(), beneficiario);
+        aguardarElegibilidade(protocolo);
+        var barreira = new CyclicBarrier(2);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Callable<Boolean> tarefa = () -> { barreira.await(10, TimeUnit.SECONDS); return processamento.processar(protocolo); };
+            var primeira = executor.submit(tarefa);
+            var segunda = executor.submit(tarefa);
+            assertThat(List.of(primeira.get(30, TimeUnit.SECONDS), segunda.get(30, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(true, false);
+        }
+        assertThat(mapper.readTree(consultar(protocolo).body()).get("status").asText()).isEqualTo("CONFIRMADA");
+        assertThat(reservas(protocolo)).isEqualTo(2);
+    }
+
+    @Test
+    void deveDesfazerLiberacaoEFinalizacaoSeTransacaoFalhar() throws Exception {
+        var beneficiario = preparar("ATIVA");
+        var protocolo = registrar(UUID.randomUUID().toString(), beneficiario);
+        aguardarElegibilidade(protocolo);
+        jdbc.update("UPDATE autorizacoes SET status = 'REVOGADA' WHERE beneficiario_id = ?", beneficiario);
+        // O trigger simula uma falha real no banco, depois de DELETE das reservas e antes do commit.
+        jdbc.execute("""
+                CREATE OR REPLACE FUNCTION falhar_finalizacao_teste() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.beneficiario_id = '%s' THEN
+                        RAISE EXCEPTION 'Falha simulada no processamento';
+                    END IF;
+                    RETURN NEW;
+                END $$
+                """.formatted(beneficiario));
+        jdbc.execute("CREATE CONSTRAINT TRIGGER falha_processamento_teste AFTER UPDATE ON operacoes_portabilidade "
+                + "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION falhar_finalizacao_teste()");
+        try {
+            assertThatThrownBy(() -> processamento.processar(protocolo)).isInstanceOf(RuntimeException.class);
+            var json = mapper.readTree(consultar(protocolo).body());
+            assertThat(json.get("status").asText()).isEqualTo("PENDENTE");
+            assertThat(json.get("dataProcessamento").isNull()).isTrue();
+            assertThat(json.get("motivoRejeicao").isNull()).isTrue();
+            assertThat(reservas(protocolo)).isEqualTo(2);
+        } finally {
+            jdbc.execute("DROP TRIGGER falha_processamento_teste ON operacoes_portabilidade");
+            jdbc.execute("DROP FUNCTION falhar_finalizacao_teste()");
+        }
+        assertThat(processamento.processar(protocolo)).isTrue();
+        assertThat(reservas(protocolo)).isZero();
+    }
+
 }

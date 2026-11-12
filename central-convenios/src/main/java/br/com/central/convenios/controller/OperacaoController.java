@@ -15,6 +15,11 @@ public class OperacaoController {
 
     public OperacaoController(OperacaoService service) { this.service = service; }
 
+    @GetMapping("/{protocolo}")
+    public OperacaoConsultaRespostaDTO consultar(@PathVariable UUID protocolo) {
+        return service.consultar(protocolo);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public OperacaoRespostaDTO registrar(@RequestHeader("Idempotency-Key") String chave,

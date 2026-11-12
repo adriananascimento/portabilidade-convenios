@@ -8,7 +8,8 @@ import org.springframework.context.annotation.Import;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "central.processamento.habilitado=false"
 )
 @Import(BaseCentralConveniosTest.ConfiguracaoContainers.class)
 public abstract class BaseCentralConveniosTest {

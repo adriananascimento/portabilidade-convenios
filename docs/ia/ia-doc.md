@@ -141,3 +141,92 @@ de escrita no cache ~/.m2. Execução posterior solicitada com acesso ao cache e
 - Maven emitiu avisos de HTTP 401 em metadados de repositórios externos e de APIs
   obsoletas/configuração de testes existente, sem impedir o build.
 - `git diff --check`: sem erros de whitespace.
+
+
+# Uso da IA — consulta e processamento de operações (em andamento)
+
+## Tarefa e orientações
+
+O usuário solicitou GET por protocolo, processamento com @Scheduled, revalidação
+determinística, reservas liberáveis após rejeição, atomicidade e concorrência,
+testes sem sleeps, README e registro de IA. Foram lidos AGENTS.md, código,
+migrações e testes existentes. Não alterar frontend nem backend principal.
+
+## Resultado parcial e proposta pendente
+
+Implementado GET somente leitura, DTO próprio para preservar o contrato do POST,
+404, enum com três estados e V6 com data_processamento/motivo_rejeicao. A V5 já
+amplia o CHECK de status, portanto foi preservada. Testes de consulta cobrem
+pendente sem mutação, finalizadas com campos de resultado e protocolo ausente.
+
+Enviada para aprovação humana a proposta de manter ElementCollection como
+histórico e separar reserva ativa com unicidade no PostgreSQL; processamento
+com lock pessimista e transação por operação. O AGENTS.md exige apresentação
+para aprovação de decisões arquiteturais relevantes. Não foi implementada a
+parte dependente dessa aprovação nem presumida revisão humana.
+
+## Validação parcial
+
+A primeira tentativa de Maven no sandbox falhou por escrita no cache ~/.m2.
+Com acesso autorizado, `./mvnw -Dtest=OperacaoIntegracaoTest test` passou:
+11 testes, zero falhas/erros/ignorados (antes da adição do teste de finalizadas).
+A suíte completa `./mvnw test` passou: BUILD SUCCESS; 29 testes, zero falhas,
+zero erros e zero ignorados. Inclui 12 testes de operações, 12 de autorizações,
+4 de agenda e 1 de contexto. Integração HTTP com PostgreSQL descartável via
+Testcontainers, Flyway V1–V6. O teste de contexto usou o datasource local
+existente e aplicou V5/V6. `git diff --check` sem erros de whitespace.
+
+
+# Uso da IA — processamento e reservas após aprovação
+
+## Autorização e orientações
+
+O usuário aprovou explicitamente separar histórico e reservas ativas, exigindo
+preservação de histórico, transações para criação/liberação, retenção em operações
+confirmadas, proteção concorrente e lógica testável sem agendamento. Mantidos
+os limites da solicitação inicial, sem frontend, backend principal ou dependências
+novas. O AGENTS.md e a proposta ADR 0002 orientaram a implementação.
+
+## Resultado
+
+V7 migra reservas de vínculos pendentes/confirmados, remove somente a unicidade
+global do histórico e cria PK por parcela e FK composta para vínculo histórico.
+ElementCollection preservado. POST insere reservas após flush do histórico na
+mesma transação. Não usa merge para inserir, evitando sobrescrita de uma reserva.
+Agenda passa a excluir reservas ativas e exigir status base DISPONIVEL.
+
+ProcessamentoOperacaoService seleciona até 100 pendentes, aplica atraso configurável,
+bloqueia operação/parcelas e revalida beneficiário, data UTC, status e autorização
+ativa (com lock compartilhado). Finaliza com data e motivo determinístico. Libera
+reservas somente na rejeição, na mesma transação. REQUIRES_NEW por operação;
+estados finais são ignorados. Erros técnicos geram rollback e log do protocolo,
+permitindo nova tentativa sem interromper as demais operações do lote.
+AgendamentoOperacaoService usa @Scheduled com intervalo configurável e pode ser
+desabilitado; testes invocam a lógica diretamente com Clock fixo e sem sleeps.
+README e ADR atualizados. Não foi presumida revisão humana do código final.
+
+## Validação em andamento
+
+Primeira tentativa no sandbox falhou por escrita nos locks ~/.m2, antes de
+compilar. Com acesso autorizado, a suíte OperacaoIntegracaoTest passou:
+17 testes, zero falhas, erros ou ignorados. Após essa execução, o teste de falha
+foi reforçado para disparar no commit e foi acrescentada a migração de vínculos
+prévios em esquema isolado. Resultado final da suíte completa registrado a seguir.
+
+
+## Validação final e revisão
+
+`./mvnw test` em central-convenios: BUILD SUCCESS, 35 testes, zero falhas,
+zero erros e zero ignorados. Foram 17 de operações, 1 de migração de reservas,
+12 de autorizações, 4 de agenda e 1 de contexto. Flyway aplicou V7 e Hibernate
+validou o esquema; integração com PostgreSQL 17 real via Testcontainers.
+O teste de contexto existente utilizou o datasource local e aplicou V7 nele,
+com agendador explicitamente desabilitado. O teste de migração criou esquema
+isolado até V6, inseriu vínculos prévios, aplicou V7 e verificou backfill,
+histórico e violações reais de unicidade/FK. O teste de rollback utilizou
+constraint trigger adiado até o commit, removido no finally. A concorrência
+entre dois processadores retornou uma execução efetiva e outra ignorada.
+`git diff --check`: sem erros de whitespace.
+
+Pendente revisão humana do código e dos testes. A aprovação humana registrada
+refere-se à modelagem proposta, não a uma revisão ou execução humana dos testes.

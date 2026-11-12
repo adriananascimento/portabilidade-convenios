@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -21,18 +22,26 @@ public class OperacaoService {
     private final OperacaoRepository operacoes;
     private final ParcelaRepository parcelas;
     private final AutorizacaoRepository autorizacoes;
+    private final ReservaRepository reservas;
     private final Clock relogio;
     private final TransactionTemplate transacao;
 
     public OperacaoService(OperacaoRepository operacoes, ParcelaRepository parcelas,
-                           AutorizacaoRepository autorizacoes, Clock relogio,
+                           AutorizacaoRepository autorizacoes, ReservaRepository reservas, Clock relogio,
                            PlatformTransactionManager transactionManager) {
         this.operacoes = operacoes;
         this.parcelas = parcelas;
         this.autorizacoes = autorizacoes;
+        this.reservas = reservas;
         this.relogio = relogio;
         transacao = new TransactionTemplate(transactionManager);
         transacao.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
+
+    @Transactional(readOnly = true)
+    public OperacaoConsultaRespostaDTO consultar(UUID protocolo) {
+        return OperacaoConsultaRespostaDTO.de(operacoes.findById(protocolo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Operação inexistente")));
     }
 
     public OperacaoRespostaDTO registrar(UUID chave, OperacaoRequisicaoDTO requisicao) {
@@ -65,6 +74,7 @@ public class OperacaoService {
                 }
                 operacao.vincularParcelas(ids);
                 operacoes.flush();
+                reservas.reservar(operacao.getProtocolo());
                 return OperacaoRespostaDTO.de(operacao);
             });
         } catch (DataIntegrityViolationException excecao) {

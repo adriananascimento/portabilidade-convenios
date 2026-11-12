@@ -20,6 +20,8 @@ public interface ParcelaRepository extends JpaRepository<Parcela, String> {
             select p from Parcela p
             where p.beneficiarioId = :beneficiarioId
               and p.dataDesconto >= :dataReferencia
+              and p.status = br.com.central.convenios.entity.StatusParcela.DISPONIVEL
+              and not exists (select r.parcelaId from ReservaParcela r where r.parcelaId = p.id)
               and exists (select a.id from Autorizacao a
                           where a.beneficiarioId = p.beneficiarioId
                             and a.convenioId = p.convenioId and a.status = :status)

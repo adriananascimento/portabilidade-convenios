@@ -28,6 +28,10 @@ public class OperacaoPortabilidade {
     private StatusOperacao status;
     @Column(name = "data_criacao", nullable = false)
     private OffsetDateTime dataCriacao;
+    @Column(name = "data_processamento")
+    private OffsetDateTime dataProcessamento;
+    @Column(name = "motivo_rejeicao")
+    private String motivoRejeicao;
     @ElementCollection
     @CollectionTable(name = "operacoes_parcelas", joinColumns = @JoinColumn(name = "operacao_protocolo"))
     @Column(name = "parcela_id", nullable = false, length = 100)
@@ -53,7 +57,21 @@ public class OperacaoPortabilidade {
                 && parcelasIds.equals(new HashSet<>(requisicao.parcelasIds()));
     }
 
+    public void finalizar(OffsetDateTime data, String motivo) {
+        if (status != StatusOperacao.PENDENTE) {
+            throw new IllegalStateException("Operação já finalizada");
+        }
+        status = motivo == null ? StatusOperacao.CONFIRMADA : StatusOperacao.REJEITADA;
+        dataProcessamento = data;
+        motivoRejeicao = motivo;
+    }
+
+    public String getBeneficiarioId() { return beneficiarioId; }
+    public Set<String> getParcelasIds() { return Set.copyOf(parcelasIds); }
     public void vincularParcelas(Set<String> ids) { parcelasIds.addAll(ids); }
+    public OffsetDateTime getDataCriacao() { return dataCriacao; }
+    public OffsetDateTime getDataProcessamento() { return dataProcessamento; }
+    public String getMotivoRejeicao() { return motivoRejeicao; }
     public UUID getProtocolo() { return protocolo; }
     public StatusOperacao getStatus() { return status; }
 }
