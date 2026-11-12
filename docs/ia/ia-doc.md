@@ -90,3 +90,54 @@ consulta, exemplos, referência UTC e execução real dos testes existentes.
   de API obsoleta no teste; não impediram o build.
 - `git diff --check`: sem erros de whitespace.
 
+
+# Uso da IA — registro de operações de portabilidade
+
+## Tarefa e orientações
+
+Implementar somente POST /operacoes-portabilidade na central-convenios, com DTOs,
+validação, idempotência UUID, reserva concorrente, migração incremental e testes.
+Seguir as camadas e a nomenclatura do AGENTS.md, preservar autorização, agenda,
+backend e frontend. Não implementar processamento ou consulta de operações.
+O usuário solicitou este registro no caminho docs/ia/id-doc.md.
+
+## Resultado e decisões
+
+Criados Controller, Service, Repository, entidade OperacaoPortabilidade, enum
+PENDENTE, DTOs e V4. Adicionado getter do beneficiário e consulta com lock ao
+Repository de parcelas, sem alterar a consulta da agenda. A tabela de vínculos
+é mapeada como ElementCollection de identificadores; possui PK composta,
+FKs e UNIQUE por parcela. UUIDs e timestamp com fuso são tipos nativos no banco.
+Não foi necessário duplicar valores monetários da tabela de parcelas.
+
+Seguido o padrão existente de TransactionTemplate REQUIRES_NEW e recuperação
+após rollback. UNIQUE na chave serializa inserções com a mesma chave; UNIQUE
+na parcela impede dupla reserva. Locks pessimistas de parcelas em ordem de ID
+reduzem risco de deadlock para conjuntos sobrepostos. Falhas desfazem operação
+e vínculos. Comparação exata de beneficiário/conta e do conjunto de parcelas,
+sem hash e sem considerar ordem. Repetições são recuperadas antes da validação
+de disponibilidade. Disponibilidade usa status DISPONIVEL e data >= hoje UTC,
+seguindo a elegibilidade já usada pela agenda. Não há novas dependências.
+
+HTTP: 400 para entrada inválida, 422 para parcelas inexistentes/autorização
+inativa e 409 para indisponibilidade ou conflitos. Criados nove testes HTTP de
+integração com PostgreSQL real, incluindo três cenários de concorrência.
+
+
+## Validação
+
+A primeira tentativa de Maven no sandbox falhou antes da compilação por bloqueio
+de escrita no cache ~/.m2. Execução posterior solicitada com acesso ao cache e Docker.
+
+- Primeira execução completa de `./mvnw test`: BUILD SUCCESS, 26 testes,
+  zero falhas, zero erros e zero ignorados.
+- Após acrescentar a consulta pessimista ordenada de parcelas, nova execução de
+  `./mvnw test` em central-convenios: BUILD SUCCESS, 26 testes, zero falhas,
+  zero erros e zero ignorados. Inclui nove testes de operações, doze de
+  autorização, quatro de agenda e um de contexto.
+- Testes HTTP usaram PostgreSQL 17 via Testcontainers; Flyway aplicou V1–V4 e
+  Hibernate validou o esquema. O teste de contexto existente aplicou V4 também
+  no PostgreSQL local da porta 5434, usando a configuração normal da aplicação.
+- Maven emitiu avisos de HTTP 401 em metadados de repositórios externos e de APIs
+  obsoletas/configuração de testes existente, sem impedir o build.
+- `git diff --check`: sem erros de whitespace.

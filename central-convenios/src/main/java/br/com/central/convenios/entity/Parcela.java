@@ -29,6 +29,7 @@ public class Parcela {
 
     protected Parcela() {}
 
+    public String getBeneficiarioId() { return beneficiarioId; }
     public String getId() { return id; }
     public String getConvenioId() { return convenioId; }
     public BigDecimal getValor() { return valor; }
