@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: portabilidade-convenios
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/portabilidade
+    username: portabilidade
+    password: portabilidade
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration 

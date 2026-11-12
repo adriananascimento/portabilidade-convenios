@@ -1,0 +1,21 @@
+services:
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: central_convenios
+      POSTGRES_USER: central
+      POSTGRES_PASSWORD: central
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - dados_postgres_central:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U central -d central_convenios"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s    
+
+volumes:
+  dados_postgres_central:
