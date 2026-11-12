@@ -11,7 +11,7 @@ docker compose up -d --wait
 ./mvnw spring-boot:run
 ```
 
-O Flyway aplica `V1__criar_autorizacoes.sql` automaticamente. O Hibernate apenas valida
+O Flyway aplica as migrações V1 (autorizações), V2 (parcelas) e V3 (dados fictícios) automaticamente. O Hibernate apenas valida
 o esquema. O PostgreSQL de desenvolvimento usa a porta 5434; as credenciais locais
 estão no Compose e em `application.yaml`. Em outros ambientes, configure
 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`.
@@ -39,25 +39,49 @@ Não há revogação nem reativação nesta etapa; o comportamento para um regis
 
 ### Testes da Central
 
-Os testes exercitam a API HTTP, JPA e Flyway em PostgreSQL real, sem mocks.
-Utilize um banco exclusivo de testes; o padrão é a porta 55434 e o banco
-`central_convenios_testes`, evitando o banco de desenvolvimento. Os testes
-inserem registros com identificadores aleatórios; o contêiner abaixo não usa volume.
+Os testes de integração de autorização e agenda exercitam HTTP, JPA e Flyway com
+PostgreSQL real criado pelo Testcontainers. Requerem Docker ativo e acesso à imagem
+`postgres:17-alpine`; os contêineres são descartáveis e não usam o banco de desenvolvimento.
+O teste existente `CentralConveniosApplicationTests` usa a configuração normal da
+aplicação, portanto requer também o PostgreSQL local (ou variáveis de datasource
+apontando para um banco exclusivo de testes).
 
 ```sh
-docker run --detach --rm --name central-autorizacoes-testes \
-  -e POSTGRES_DB=central_convenios_testes \
-  -e POSTGRES_USER=central -e POSTGRES_PASSWORD=central \
-  -p 127.0.0.1:55434:5432 postgres:17
-# Aguarde o banco ficar pronto; repita até obter sucesso:
-docker exec central-autorizacoes-testes pg_isready -U central -d central_convenios_testes
-# Na pasta central-convenios:
+# Na pasta central-convenios, com Docker ativo:
+docker compose up -d --wait
 ./mvnw test
-# Ao terminar, descarte somente o contêiner de testes:
-docker stop central-autorizacoes-testes
+# Somente as suítes HTTP, com bancos isolados pelo Testcontainers:
+./mvnw -Dtest=AutorizacaoIntegracaoTest,AgendaIntegracaoTest test
 ```
 
-Para outro PostgreSQL de testes, defina `CENTRAL_TEST_DATABASE_URL` e, se necessário,
-`SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`.
-A suíte cobre criação, reenvio, validação e oito requisições concorrentes, exigindo
-um único `201`, sete `200`, respostas iguais e apenas um registro para o par.
+A suíte de autorização cobre criação, reenvio, validação e oito requisições
+concorrentes. A suíte de agenda cobre autorização ativa, ausente e revogada,
+isolamento entre beneficiários e convênios, inclusão de hoje, exclusão de vencidas,
+ordenação entre convênios e listas vazias. A referência temporal é fixa nos testes,
+sem depender do dia da execução.
+
+## Consulta da agenda de parcelas
+
+```sh
+curl http://localhost:8081/beneficiarios/BEN-001/agenda
+```
+
+Retorna `200 OK` com `beneficiarioId` e `parcelas`. Cada parcela contém `parcelaId`,
+`convenioId`, `valor`, `dataDesconto` e `status`. Apenas parcelas do beneficiário
+com autorização `ATIVA` para o mesmo convênio e data de desconto maior ou igual a
+hoje são retornadas, em ordem crescente de data (desempate por identificador).
+A data de referência usa UTC. Sem parcelas elegíveis, inclusive para beneficiário
+sem registros, retorna `parcelas: []`.
+
+A V2 cria `parcelas` com identificadores textuais, valor `NUMERIC(15,2)`, data
+`DATE` e status `DISPONIVEL`, único estado necessário neste escopo. A consulta não
+adiciona filtro por status da parcela. O índice por beneficiário e data auxilia
+a seleção. Não há endpoint de cadastro nem vínculo obrigatório com autorização:
+a parcela pode existir antes do consentimento e só fica visível quando autorizado.
+
+A V3 inclui parcelas fictícias de `BEN-001` e `BEN-002`, dos convênios `CONV-001`
+e `CONV-002`, com datas vencidas em 2020 e futuras em 2099. Para consultar dados
+visíveis de `BEN-001`, registre sua autorização para `CONV-001` com o POST mostrado
+acima; a agenda então inclui `PAR-002` e `PAR-001`, nessa ordem. A migração não
+insere autorizações. Os dados fictícios serão inseridos em todo banco que aplicar
+V3; as datas futuras dos exemplos permanecem válidas até 2099.
