@@ -31,10 +31,14 @@ public class AutorizacaoService {
         try {
             var criada = transacao.execute(status -> repository.saveAndFlush(
                     new Autorizacao(requisicao.beneficiarioId(), requisicao.convenioId())));
+
             return new ResultadoRegistro(AutorizacaoRespostaDTO.de(criada), true);
+
         } catch (DataIntegrityViolationException excecao) {
+
             var concorrente = repository.findByBeneficiarioIdAndConvenioId(
                     requisicao.beneficiarioId(), requisicao.convenioId());
+
             if (concorrente.isPresent() && concorrente.get().getStatus() == StatusAutorizacao.ATIVA) {
                 return new ResultadoRegistro(AutorizacaoRespostaDTO.de(concorrente.get()), false);
             }

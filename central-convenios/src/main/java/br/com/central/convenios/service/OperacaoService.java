@@ -41,7 +41,7 @@ public class OperacaoService {
     @Transactional(readOnly = true)
     public OperacaoConsultaRespostaDTO consultar(UUID protocolo) {
         return OperacaoConsultaRespostaDTO.de(operacoes.findById(protocolo)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Operação inexistente")));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Protocolo não encontrato!")));
     }
 
     public OperacaoRespostaDTO registrar(UUID chave, OperacaoRequisicaoDTO requisicao) {
@@ -50,12 +50,23 @@ public class OperacaoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A lista contém parcelas repetidas");
         }
         var existente = operacoes.findByChaveIdempotencia(chave);
-        if (existente.isPresent()) return recuperar(existente.get(), requisicao);
+
+        if (existente.isPresent()) {
+            return recuperar(existente.get(), requisicao);
+        }
         try {
             return transacao.execute(transacaoAtual -> {
                 // A chave é disputada antes das parcelas; toda falha desfaz também esta inserção.
-                var operacao = operacoes.saveAndFlush(new OperacaoPortabilidade(
-                        chave, requisicao, OffsetDateTime.now(relogio)));
+                var operacao = operacoes.saveAndFlush(
+                        new OperacaoPortabilidade(
+                            chave,
+                            requisicao.beneficiarioId(),
+                            requisicao.contaDestino().conta(),
+                            requisicao.contaDestino().agencia(),
+                            requisicao.contaDestino().banco(),
+                            OffsetDateTime.now(relogio)
+                        )
+                );
                 var selecionadas = parcelas.buscarParaReserva(ids);
                 if (selecionadas.size() != ids.size()) {
                     throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Parcelas inexistentes");
@@ -86,7 +97,13 @@ public class OperacaoService {
     }
 
     private OperacaoRespostaDTO recuperar(OperacaoPortabilidade operacao, OperacaoRequisicaoDTO requisicao) {
-        if (!operacao.mesmoConteudo(requisicao)) {
+        if (!operacao.mesmoConteudo(
+                requisicao.beneficiarioId(),
+                requisicao.contaDestino().banco(),
+                requisicao.contaDestino().agencia(),
+                requisicao.contaDestino().conta(),
+                requisicao.parcelasIds())
+        ) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Chave de idempotência reutilizada com conteúdo diferente");
         }
         return OperacaoRespostaDTO.de(operacao);
