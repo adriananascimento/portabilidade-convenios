@@ -1,6 +1,7 @@
 package br.com.central.convenios.entity;
 
 import br.com.central.convenios.dto.OperacaoRequisicaoDTO;
+import br.com.central.convenios.exception.RegraNegocioException;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
@@ -83,7 +84,7 @@ public class OperacaoPortabilidade {
 
     public void finalizar(OffsetDateTime data, String motivo) {
         if (status != StatusOperacao.PENDENTE) {
-            throw new IllegalStateException("Operação já finalizada");
+            throw new RegraNegocioException("Operação já finalizada");
         }
         status = motivo == null ? StatusOperacao.CONFIRMADA : StatusOperacao.REJEITADA;
         dataProcessamento = data;

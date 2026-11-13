@@ -2,6 +2,10 @@ package br.com.central.convenios.service;
 
 import br.com.central.convenios.dto.*;
 import br.com.central.convenios.entity.*;
+import br.com.central.convenios.exception.ConflitoException;
+import br.com.central.convenios.exception.RecursoNaoEncontradoException;
+import br.com.central.convenios.exception.RegraNegocioException;
+import br.com.central.convenios.exception.RequisicaoInvalidaException;
 import br.com.central.convenios.repository.*;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -41,13 +45,13 @@ public class OperacaoService {
     @Transactional(readOnly = true)
     public OperacaoConsultaRespostaDTO consultar(UUID protocolo) {
         return OperacaoConsultaRespostaDTO.de(operacoes.findById(protocolo)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Protocolo não encontrato!")));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Protocolo não encontrato!")));
     }
 
     public OperacaoRespostaDTO registrar(UUID chave, OperacaoRequisicaoDTO requisicao) {
         var ids = new HashSet<>(requisicao.parcelasIds());
         if (ids.size() != requisicao.parcelasIds().size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A lista contém parcelas repetidas");
+            throw new RequisicaoInvalidaException("A lista contém parcelas repetidas");
         }
         var existente = operacoes.findByChaveIdempotencia(chave);
 
@@ -69,18 +73,18 @@ public class OperacaoService {
                 );
                 var selecionadas = parcelas.buscarParaReserva(ids);
                 if (selecionadas.size() != ids.size()) {
-                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Parcelas inexistentes");
+                    throw new RegraNegocioException("Parcelas inexistentes");
                 }
                 for (var parcela : selecionadas) {
                     if (!parcela.getBeneficiarioId().equals(requisicao.beneficiarioId())
                             || Boolean.FALSE.equals(parcelas.parcelaDisponivel(parcela.getId()))
                             || parcela.getDataDesconto().isBefore(LocalDate.now(relogio))) {
-                        throw new ResponseStatusException(HttpStatus.CONFLICT, "Parcela indisponível para portabilidade");
+                        throw new ConflitoException("Parcela indisponível para portabilidade");
                     }
                     var autorizacao = autorizacoes.findByBeneficiarioIdAndConvenioId(
                             requisicao.beneficiarioId(), parcela.getConvenioId());
                     if (autorizacao.isEmpty() || autorizacao.get().getStatus() != StatusAutorizacao.ATIVA) {
-                        throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "Beneficiário sem autorização ativa");
+                        throw new RegraNegocioException("Beneficiário sem autorização ativa");
                     }
                 }
                 operacao.vincularParcelas(ids);
@@ -92,7 +96,7 @@ public class OperacaoService {
             // Consultar apenas depois do rollback: a transação vencedora já está confirmada.
             var concorrente = operacoes.findByChaveIdempotencia(chave);
             if (concorrente.isPresent()) return recuperar(concorrente.get(), requisicao);
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Parcela já vinculada a outra operação", excecao);
+            throw new ConflitoException("Parcela já vinculada a outra operação");
         }
     }
 
@@ -104,7 +108,7 @@ public class OperacaoService {
                 requisicao.contaDestino().conta(),
                 requisicao.parcelasIds())
         ) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Chave de idempotência reutilizada com conteúdo diferente");
+            throw new ConflitoException("Chave de idempotência reutilizada com conteúdo diferente");
         }
         return OperacaoRespostaDTO.de(operacao);
     }
