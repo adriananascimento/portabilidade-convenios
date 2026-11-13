@@ -15,4 +15,8 @@ spring:
 
   flyway:
     enabled: true
-    locations: classpath:db/migration 
+    locations: classpath:db/migration
+    
+central:
+  convenios:
+    url: ${CENTRAL_CONVENIOS_URL:http://localhost:8081}
