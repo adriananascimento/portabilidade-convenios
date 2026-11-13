@@ -67,7 +67,6 @@ public class ProcessamentoOperacaoService {
             String motivo = null;
             for (var parcela : selecionadas) {
                 if (!parcela.getBeneficiarioId().equals(operacao.getBeneficiarioId())
-                        || parcela.getStatus() != StatusParcela.DISPONIVEL
                         || parcela.getDataDesconto().isBefore(LocalDate.now(relogio))) {
                     motivo = "Parcela indisponível para portabilidade";
                     break;

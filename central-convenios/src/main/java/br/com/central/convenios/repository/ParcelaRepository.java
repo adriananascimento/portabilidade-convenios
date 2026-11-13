@@ -20,7 +20,6 @@ public interface ParcelaRepository extends JpaRepository<Parcela, String> {
             select p from Parcela p
             where p.beneficiarioId = :beneficiarioId
               and p.dataDesconto >= :dataReferencia
-              and p.status = br.com.central.convenios.entity.StatusParcela.DISPONIVEL
               and not exists (select r.parcelaId from ReservaParcela r where r.parcelaId = p.id)
               and exists (select a.id from Autorizacao a
                           where a.beneficiarioId = p.beneficiarioId
@@ -30,4 +29,9 @@ public interface ParcelaRepository extends JpaRepository<Parcela, String> {
     List<Parcela> consultarAgenda(@Param("beneficiarioId") String beneficiarioId,
                                  @Param("dataReferencia") LocalDate dataReferencia,
                                  @Param("status") StatusAutorizacao status);
+
+    @Query("select case when not exists (select r.parcelaId from ReservaParcela r where r.parcelaId = p.id) " +
+            "then true else false end " +
+            "from Parcela p where p.id = :parcelaId")
+    Boolean parcelaDisponivel(@Param("parcelaId") String parcelaId);
 }

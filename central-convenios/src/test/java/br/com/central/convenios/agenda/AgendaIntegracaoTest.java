@@ -67,8 +67,8 @@ class AgendaIntegracaoTest extends BaseCentralConveniosTest {
     private String parcela(String beneficiario, String convenio, LocalDate data) {
         String id = UUID.randomUUID().toString();
         jdbc.update("""
-                INSERT INTO parcelas (id, beneficiario_id, convenio_id, valor, data_desconto, status)
-                VALUES (?, ?, ?, ?, ?, 'DISPONIVEL')
+                INSERT INTO parcelas (id, beneficiario_id, convenio_id, valor, data_desconto)
+                VALUES (?, ?, ?, ?, ?)
                 """, id, beneficiario, convenio, new BigDecimal("350.00"), data);
         return id;
     }
@@ -92,11 +92,10 @@ class AgendaIntegracaoTest extends BaseCentralConveniosTest {
         assertThat(parcelas.get(0).get("parcelaId").asText()).isEqualTo(atual);
         assertThat(parcelas.get(1).get("parcelaId").asText()).isEqualTo(futura);
         var primeira = parcelas.get(0);
-        assertThat(primeira.size()).isEqualTo(5);
+        assertThat(primeira.size()).isEqualTo(4);
         assertThat(primeira.get("convenioId").asText()).isEqualTo("CONV-001");
         assertThat(primeira.get("valor").decimalValue()).isEqualByComparingTo("350.00");
         assertThat(primeira.get("dataDesconto").asText()).isEqualTo(HOJE.toString());
-        assertThat(primeira.get("status").asText()).isEqualTo("DISPONIVEL");
     }
 
     @Test

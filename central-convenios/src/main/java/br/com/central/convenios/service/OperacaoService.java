@@ -61,9 +61,9 @@ public class OperacaoService {
                         new OperacaoPortabilidade(
                             chave,
                             requisicao.beneficiarioId(),
-                            requisicao.contaDestino().conta(),
-                            requisicao.contaDestino().agencia(),
                             requisicao.contaDestino().banco(),
+                            requisicao.contaDestino().agencia(),
+                            requisicao.contaDestino().conta(),
                             OffsetDateTime.now(relogio)
                         )
                 );
@@ -73,7 +73,7 @@ public class OperacaoService {
                 }
                 for (var parcela : selecionadas) {
                     if (!parcela.getBeneficiarioId().equals(requisicao.beneficiarioId())
-                            || parcela.getStatus() != StatusParcela.DISPONIVEL
+                            || Boolean.FALSE.equals(parcelas.parcelaDisponivel(parcela.getId()))
                             || parcela.getDataDesconto().isBefore(LocalDate.now(relogio))) {
                         throw new ResponseStatusException(HttpStatus.CONFLICT, "Parcela indisponível para portabilidade");
                     }

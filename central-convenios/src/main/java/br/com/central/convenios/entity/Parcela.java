@@ -23,10 +23,6 @@ public class Parcela {
     @Column(name = "data_desconto", nullable = false)
     private LocalDate dataDesconto;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private StatusParcela status;
-
     protected Parcela() {}
 
     public String getBeneficiarioId() { return beneficiarioId; }
@@ -34,5 +30,4 @@ public class Parcela {
     public String getConvenioId() { return convenioId; }
     public BigDecimal getValor() { return valor; }
     public LocalDate getDataDesconto() { return dataDesconto; }
-    public StatusParcela getStatus() { return status; }
 }

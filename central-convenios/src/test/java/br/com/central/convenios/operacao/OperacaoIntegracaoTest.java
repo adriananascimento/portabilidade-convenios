@@ -43,7 +43,7 @@ class OperacaoIntegracaoTest extends BaseCentralConveniosTest {
         jdbc.update("INSERT INTO autorizacoes VALUES (?, ?, 'CONV', CURRENT_TIMESTAMP, ?)",
                 UUID.randomUUID(), beneficiario, autorizacao);
         for (int i = 1; i <= 2; i++) {
-            jdbc.update("INSERT INTO parcelas VALUES (?, ?, 'CONV', 100.25, DATE '2099-01-01', 'DISPONIVEL')",
+            jdbc.update("INSERT INTO parcelas VALUES (?, ?, 'CONV', 100.25, DATE '2099-01-01')",
                     beneficiario + "-" + i, beneficiario);
         }
         return beneficiario;
