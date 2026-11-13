@@ -1,8 +1,29 @@
-# Registro de uso de IA
+# Uso de IA — Central de Convênios
 
-# Uso da IA — registro de autorização na Central
+## Origem e critérios de atribuição
 
-## Tarefa e orientações
+Os seis registros abaixo foram migrados de `docs/ia/ia-doc.md` e relacionados
+às alterações do histórico Git. Descrevem implementações auxiliadas por IA;
+não permitem determinar a autoria de cada linha nem afirmar geração integral.
+A ferramenta e o modelo de IA não foram identificados nos registros originais.
+Autoria de commit não comprova desenvolvimento exclusivamente humano ou revisão humana.
+Os resultados de testes são históricos, transcritos dos registros, e não foram
+executados novamente nesta reorganização. Estados intermediários foram preservados
+como etapas históricas, inclusive a proposta que depois recebeu aprovação.
+
+Os ADRs [0001](../adr/0001-isolamento-da-central-de-convenios.md),
+[0002](../adr/0002-processamento-e-reserva-de-parcelas.md) e
+[0003](../adr/0003-retry-processamento-portabilidade.md) permanecem preservados.
+
+## 1. registro de autorização na Central
+
+Evidência no histórico: `943c454`.
+
+### Ferramentas utilizadas
+
+Assistente de IA não identificado; Maven Wrapper e Git nas validações registradas. PostgreSQL e Flyway nas integrações; contêiner PostgreSQL descartável documentado nesta etapa.
+
+### Finalidade
 
 Implementar `POST /autorizacoes` exclusivamente na aplicação `central-convenios`,
 com respostas 201/200/400, persistência PostgreSQL, Flyway, validação e unicidade
@@ -10,7 +31,7 @@ sob concorrência. Seguir o AGENTS.md: domínio em português, camadas separadas
 testes organizados por feature, sem alterar o backend principal ou o frontend,
 sem dependências novas ou funcionalidades adicionais.
 
-## Resultado
+### Implementações auxiliadas
 
 Foram criados entidade e enum, Repository, Service, Controller, DTOs de entrada e
 saída, migração V1 e testes HTTP de integração. O README foi complementado com
@@ -21,7 +42,13 @@ O timestamp é gerado em UTC com microssegundos para consistência com PostgreSQ
 Não foram implementadas revogação ou reativação, nem alteradas dependências.
 As alterações prévias do usuário foram preservadas.
 
-## Validações realizadas
+### Decisões humanas
+
+Não há registro específico de aprovação ou revisão humana do código desta etapa.
+
+### Validações
+
+#### Validações realizadas
 
 - A tentativa inicial de `./mvnw test` no sandbox falhou ao acessar locks do cache Maven.
 - Com acesso autorizado, a compilação revelou um erro de escape de string no teste,
@@ -37,9 +64,19 @@ As alterações prévias do usuário foram preservadas.
   12 testes, zero falhas, zero erros e zero ignorados, utilizando a configuração final.
 - `git diff --check`: sem erros de whitespace.
 
-# Uso da IA — consulta da agenda de parcelas
+### Limitações
 
-## Tarefa e orientações
+O registro não individualiza trechos gerados por IA e trechos escritos por uma pessoa. As decisões técnicas descritas não são atribuídas a humanos sem evidência explícita.
+
+## 2. consulta da agenda de parcelas
+
+Evidência no histórico: `a8868cb`.
+
+### Ferramentas utilizadas
+
+Assistente de IA não identificado; Maven Wrapper e Git nas validações registradas. PostgreSQL e Flyway nas integrações; Testcontainers documentado nesta etapa.
+
+### Finalidade
 
 Implementar `GET /beneficiarios/{beneficiarioId}/agenda` apenas na Central,
 filtrando autorização ativa para o mesmo beneficiário e convênio e datas atuais
@@ -47,7 +84,7 @@ ou futuras. Preservar o registro de autorizações, backend principal, frontend 
 dependências. Seguir a organização por camadas e testes por feature do AGENTS.md.
 Criar V2, V3, DTOs, testes, documentação e informar validações reais.
 
-## Resultado e decisões de implementação
+### Implementações auxiliadas
 
 Criados AgendaController, AgendaService, ParcelaRepository, Parcela,
 StatusParcela e DTOs AgendaRespostaDTO/ParcelaRespostaDTO. A consulta JPQL usa
@@ -69,7 +106,13 @@ ontem, autorizações revogadas/ausentes e isolamento entre beneficiários e
 convênios, além do contrato dos campos de resposta. README atualizado com
 consulta, exemplos, referência UTC e execução real dos testes existentes.
 
-## Validações realizadas
+### Decisões humanas
+
+Não há registro específico de aprovação ou revisão humana do código desta etapa.
+
+### Validações
+
+#### Validações realizadas
 
 - A primeira execução de `./mvnw test` falhou antes da compilação por restrição
   de escrita nos locks do cache Maven no sandbox.
@@ -84,10 +127,19 @@ consulta, exemplos, referência UTC e execução real dos testes existentes.
   de API obsoleta no teste; não impediram o build.
 - `git diff --check`: sem erros de whitespace.
 
+### Limitações
 
-# Uso da IA — registro de operações de portabilidade
+O registro não individualiza trechos gerados por IA e trechos escritos por uma pessoa. As decisões técnicas descritas não são atribuídas a humanos sem evidência explícita.
 
-## Tarefa e orientações
+## 3. registro de operações de portabilidade
+
+Evidência no histórico: `34d2dba`.
+
+### Ferramentas utilizadas
+
+Assistente de IA não identificado; Maven Wrapper e Git nas validações registradas. PostgreSQL e Flyway nas integrações; Testcontainers documentado nesta etapa.
+
+### Finalidade
 
 Implementar somente POST /operacoes-portabilidade na central-convenios, com DTOs,
 validação, idempotência UUID, reserva concorrente, migração incremental e testes.
@@ -95,7 +147,7 @@ Seguir as camadas e a nomenclatura do AGENTS.md, preservar autorização, agenda
 backend e frontend. Não implementar processamento ou consulta de operações.
 O usuário solicitou este registro no caminho docs/ia/id-doc.md.
 
-## Resultado e decisões
+### Implementações auxiliadas
 
 Criados Controller, Service, Repository, entidade OperacaoPortabilidade, enum
 PENDENTE, DTOs e V4. Adicionado getter do beneficiário e consulta com lock ao
@@ -117,8 +169,13 @@ HTTP: 400 para entrada inválida, 422 para parcelas inexistentes/autorização
 inativa e 409 para indisponibilidade ou conflitos. Criados nove testes HTTP de
 integração com PostgreSQL real, incluindo três cenários de concorrência.
 
+### Decisões humanas
 
-## Validação
+Não há registro específico de aprovação ou revisão humana do código desta etapa.
+
+### Validações
+
+#### Validação
 
 A primeira tentativa de Maven no sandbox falhou antes da compilação por bloqueio
 de escrita no cache ~/.m2. Execução posterior solicitada com acesso ao cache e Docker.
@@ -136,17 +193,26 @@ de escrita no cache ~/.m2. Execução posterior solicitada com acesso ao cache e
   obsoletas/configuração de testes existente, sem impedir o build.
 - `git diff --check`: sem erros de whitespace.
 
+### Limitações
 
-# Uso da IA — consulta e processamento de operações (em andamento)
+O registro não individualiza trechos gerados por IA e trechos escritos por uma pessoa. As decisões técnicas descritas não são atribuídas a humanos sem evidência explícita.
 
-## Tarefa e orientações
+## 4. consulta e processamento de operações (etapa parcial)
+
+Evidência no histórico: `5b4c9d8`.
+
+### Ferramentas utilizadas
+
+Assistente de IA não identificado; Maven Wrapper e Git nas validações registradas. PostgreSQL e Flyway nas integrações; Testcontainers documentado nesta etapa.
+
+### Finalidade
 
 O usuário solicitou GET por protocolo, processamento com @Scheduled, revalidação
 determinística, reservas liberáveis após rejeição, atomicidade e concorrência,
 testes sem sleeps, README e registro de IA. Foram lidos AGENTS.md, código,
 migrações e testes existentes. Não alterar frontend nem backend principal.
 
-## Resultado parcial e proposta pendente
+### Implementações auxiliadas
 
 Implementado GET somente leitura, DTO próprio para preservar o contrato do POST,
 404, enum com três estados e V6 com data_processamento/motivo_rejeicao. A V5 já
@@ -159,7 +225,13 @@ com lock pessimista e transação por operação. O AGENTS.md exige apresentaç�
 para aprovação de decisões arquiteturais relevantes. Não foi implementada a
 parte dependente dessa aprovação nem presumida revisão humana.
 
-## Validação parcial
+### Decisões humanas
+
+A proposta de separar histórico e reservas foi submetida à aprovação humana e estava pendente nesta etapa. A aprovação aparece no registro seguinte; não equivale a revisão humana do código.
+
+### Validações
+
+#### Validação parcial
 
 A primeira tentativa de Maven no sandbox falhou por escrita no cache ~/.m2.
 Com acesso autorizado, `./mvnw -Dtest=OperacaoIntegracaoTest test` passou:
@@ -170,10 +242,19 @@ zero erros e zero ignorados. Inclui 12 testes de operações, 12 de autorizaçõ
 Testcontainers, Flyway V1–V6. O teste de contexto usou o datasource local
 existente e aplicou V5/V6. `git diff --check` sem erros de whitespace.
 
+### Limitações
 
-# Uso da IA — processamento e reservas após aprovação
+O registro não individualiza trechos gerados por IA e trechos escritos por uma pessoa. As decisões técnicas descritas não são atribuídas a humanos sem evidência explícita. Esta etapa era parcial; a conclusão do processamento está no registro seguinte.
 
-## Autorização e orientações
+## 5. processamento e reservas após aprovação
+
+Evidência no histórico: `5b4c9d8`.
+
+### Ferramentas utilizadas
+
+Assistente de IA não identificado; Maven Wrapper e Git nas validações registradas. PostgreSQL e Flyway nas integrações; Testcontainers documentado nesta etapa.
+
+### Finalidade
 
 O usuário aprovou explicitamente separar histórico e reservas ativas, exigindo
 preservação de histórico, transações para criação/liberação, retenção em operações
@@ -181,7 +262,7 @@ confirmadas, proteção concorrente e lógica testável sem agendamento. Mantido
 os limites da solicitação inicial, sem frontend, backend principal ou dependências
 novas. O AGENTS.md e a proposta ADR 0002 orientaram a implementação.
 
-## Resultado
+### Implementações auxiliadas
 
 V7 migra reservas de vínculos pendentes/confirmados, remove somente a unicidade
 global do histórico e cria PK por parcela e FK composta para vínculo histórico.
@@ -199,7 +280,13 @@ AgendamentoOperacaoService usa @Scheduled com intervalo configurável e pode ser
 desabilitado; testes invocam a lógica diretamente com Clock fixo e sem sleeps.
 README e ADR atualizados. Não foi presumida revisão humana do código final.
 
-## Validação em andamento
+### Decisões humanas
+
+Há aprovação explícita do usuário para separar histórico e reservas ativas, também registrada na ADR-0002. Não há comprovação de revisão humana do código final.
+
+### Validações
+
+#### Validação em andamento
 
 Primeira tentativa no sandbox falhou por escrita nos locks ~/.m2, antes de
 compilar. Com acesso autorizado, a suíte OperacaoIntegracaoTest passou:
@@ -207,8 +294,7 @@ compilar. Com acesso autorizado, a suíte OperacaoIntegracaoTest passou:
 foi reforçado para disparar no commit e foi acrescentada a migração de vínculos
 prévios em esquema isolado. Resultado final da suíte completa registrado a seguir.
 
-
-## Validação final e revisão
+#### Validação final e revisão
 
 `./mvnw test` em central-convenios: BUILD SUCCESS, 35 testes, zero falhas,
 zero erros e zero ignorados. Foram 17 de operações, 1 de migração de reservas,
@@ -222,9 +308,19 @@ constraint trigger adiado até o commit, removido no finally. A concorrência
 entre dois processadores retornou uma execução efetiva e outra ignorada.
 `git diff --check`: sem erros de whitespace.
 
-# Uso da IA — retry no processamento assíncrono
+### Limitações
 
-## Tarefa e orientações
+O registro não individualiza trechos gerados por IA e trechos escritos por uma pessoa. As decisões técnicas descritas não são atribuídas a humanos sem evidência explícita.
+
+## 6. retry no processamento assíncrono
+
+Evidência no histórico: `e5074a1`.
+
+### Ferramentas utilizadas
+
+Assistente de IA não identificado; Maven Wrapper e Git nas validações registradas. PostgreSQL e Flyway nas integrações; Testcontainers documentado nesta etapa.
+
+### Finalidade
 
 Analisar central-convenios e apresentar plano antes das alterações. Implementar
 até cinco tentativas, backoff de 5/10/20/40 segundos, classificação técnica,
@@ -234,7 +330,7 @@ proteção concorrente, testes PostgreSQL/Testcontainers e documentação. Prese
 alterar backend/frontend, dependências nem o arquivo preexistente não rastreado
 docs/analise-tecnica-implementacao.md.
 
-## Resultado
+### Implementações auxiliadas
 
 Plano apresentado após leitura do serviço, entidade, repositories, migrations,
 testes e documentação. V9 adicionada após confirmar V8 como última migration.
@@ -252,7 +348,13 @@ registro tardio após sucesso e reservas/histórico. Uso limitado de doubles que
 delegam aos repositories reais para controlar a janela de concorrência e falhas
 de programação; o banco, os locks e as transações continuam reais.
 
-## Validações em andamento
+### Decisões humanas
+
+Não há registro específico de aprovação ou revisão humana do código desta etapa.
+
+### Validações
+
+#### Validações em andamento
 
 A tentativa inicial de ./mvnw test foi bloqueada pela escrita no cache Maven.
 Com acesso autorizado a Maven/Docker, a execução inicial de OperacaoIntegracaoTest
@@ -262,7 +364,7 @@ com delegação ao repository real. Acrescentados cenários de falhas concorrent
 e RuntimeException não classificada. Suíte completa executada em seguida;
 resultado final registrado abaixo.
 
-## Validação final
+#### Validação final
 
 - ./mvnw test em central-convenios, com acesso autorizado ao cache e Docker:
   BUILD SUCCESS, 41 testes, zero falhas, zero erros e zero ignorados.
@@ -279,3 +381,21 @@ resultado final registrado abaixo.
 Limites: queda/indisponibilidade durante registro independente pode perder a
 contabilização; não há reconciliação automática nem diário de cada tentativa.
 Detalhes em ADR-0003.
+
+### Limitações
+
+O registro não individualiza trechos gerados por IA e trechos escritos por uma pessoa. As decisões técnicas descritas não são atribuídas a humanos sem evidência explícita.
+
+## Atividades do histórico sem atribuição comprovada
+
+| Commit | Atividade na Central | Limite da evidência |
+| --- | --- | --- |
+| `7f3f4c0` | Estrutura inicial e ADR-0001 | O registro de IA continha apenas o título; não comprova participação de IA nem autoria humana exclusiva. |
+| `7356db0` | Remoção de acoplamento entre entidade e DTO | Sem registro específico de uso de IA ou revisão humana. |
+| `07a3da9` | Remoção do status base de parcela, com V8 e ajustes nos testes | Sem registro específico de uso de IA ou revisão humana. |
+| `9ff9ca8` | Tratamento global de exceções | Sem registro específico de uso de IA ou revisão humana. |
+| `e5074a1` | V10 remove índice redundante de pendentes | O registro de retry descreve V9, mas não atribui especificamente a V10 à IA. |
+
+A remoção do status base em V8 explica a diferença entre o estado atual e as
+referências históricas a `DISPONIVEL` nos registros anteriores. Elas foram
+preservadas para manter o contexto, sem alterar os ADRs.

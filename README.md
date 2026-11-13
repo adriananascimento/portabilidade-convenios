@@ -1,5 +1,11 @@
 # Portabilidade de Convênios
 
+## Documentação de uso de IA
+
+- [Backend](docs/ia/backend.md)
+- [Central de Convênios](docs/ia/central-convenios.md)
+- [Frontend](docs/ia/frontend.md)
+
 ## Central de Convênios: registro de autorização
 
 A aplicação `central-convenios` é independente do backend e atende na porta 8081.

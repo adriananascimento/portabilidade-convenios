@@ -66,7 +66,7 @@ O objetivo é construir uma aplicação funcional, segura, testável e de fácil
 
 - Manter o README atualizado com instruções de execução.
 - Registrar decisões arquiteturais relevantes em `docs/adr/`.
-- Documentar o uso efetivo de IA em `docs/ia/ia-doc.md`, incluindo tarefas, orientações relevantes, resultados e revisões humanas.
+- Documentar o uso efetivo de IA nos arquivos `docs/ia/backend.md`, `docs/ia/central-convenios.md` e `docs/ia/frontend.md`, incluindo tarefas, orientações relevantes, resultados e revisões humanas.
 - Não inventar prompts, resultados de testes ou decisões anteriores.
 
 ## Fluxo de trabalho
