@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_operacoes_pendentes_processamento;

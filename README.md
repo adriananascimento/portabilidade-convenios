@@ -12,8 +12,8 @@ docker compose up -d --wait
 ```
 
 O Flyway aplica as migrações V1 (autorizações), V2 (parcelas), V3 (dados fictícios),
-V4 (operações), V5 (estados finais), V6 (resultado do processamento) e V7
-(reservas ativas) automaticamente. O Hibernate apenas valida
+V4 (operações), V5 (estados finais), V6 (resultado do processamento), V7
+(reservas ativas), V8 (remoção do status base de parcelas) e V9 (retry) automaticamente. O Hibernate apenas valida
 o esquema. O PostgreSQL de desenvolvimento usa a porta 5434; as credenciais locais
 estão no Compose e em `application.yaml`. Em outros ambientes, configure
 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`.
@@ -146,7 +146,7 @@ o banco local disponível para o teste de contexto existente.
 curl http://localhost:8081/operacoes-portabilidade/550e8400-e29b-41d4-a716-446655440000
 ```
 
-Retorna 200 com `protocolo`, `status` (`PENDENTE`, `CONFIRMADA` ou `REJEITADA`),
+Retorna 200 com `protocolo`, `status` (`PENDENTE`, `CONFIRMADA`, `REJEITADA` ou `FALHA_TECNICA`),
 `dataCriacao`, `dataProcessamento` e `motivoRejeicao`. As datas usam ISO-8601 com
 fuso; a aplicação gera datas em UTC. Os dois últimos campos são nulos enquanto
 pendente. Protocolo inexistente retorna 404. A consulta é somente leitura.
@@ -197,9 +197,24 @@ reserva ativa. O status base da parcela permanece DISPONIVEL; a reserva define
 a indisponibilidade durante PENDENTE e após CONFIRMADA.
 
 Execuções concorrentes serializam pela operação e não reprocessam estados finais.
-Uma falha técnica causa rollback, preservando PENDENTE e suas reservas para nova
-tentativa. O erro com protocolo é registrado e o ciclo continua nas demais
-operações. Decisão de modelagem: `docs/adr/0002-processamento-e-reserva-de-parcelas.md`.
+Uma falha técnica causa rollback. Em seguida, uma transação independente com
+lock registra a tentativa, uma categoria de erro sanitizada e o próximo horário.
+Falhas transitórias de infraestrutura têm no máximo cinco tentativas, com backoff
+de 5, 10, 20 e 40 segundos. A seleção e a revalidação verificam também
+`proxima_tentativa_em`. O relógio injetado determina os horários; o agendador pode
+executar depois do horário mínimo. Sucesso e rejeição também contam uma tentativa.
+
+A quinta falha transitória ou a primeira falha técnica permanente/não classificada
+encerra em `FALHA_TECNICA`, preservando reservas e histórico para reconciliação
+manual. Não há liberação automática nesse estado. Falhas de negócio continuam
+`REJEITADA`. O contador e o status sob lock impedem que falha tardia sobrescreva
+sucesso ou duplique o registro concorrente. `ultimo_erro` guarda somente uma
+categoria fixa e preserva a última falha mesmo se houver sucesso posterior.
+O ciclo continua nas demais operações; chamadas diretas propagam a exceção após
+registrá-la. Falha no próprio registro ou queda entre rollback e registro pode
+impedir a contabilização; não há garantia de contagem de cada execução física
+concorrente nessa janela. Classificação e trade-offs estão em
+[ADR-0003](docs/adr/0003-retry-processamento-portabilidade.md). Decisão de modelagem: `docs/adr/0002-processamento-e-reserva-de-parcelas.md`.
 
 Nos testes o agendador fica desabilitado; `ProcessamentoOperacaoService.processar`
 e `processarPendentes` são chamados diretamente com relógio fixo e criação

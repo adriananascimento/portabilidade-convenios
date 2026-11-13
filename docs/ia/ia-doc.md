@@ -37,12 +37,6 @@ As alterações prévias do usuário foram preservadas.
   12 testes, zero falhas, zero erros e zero ignorados, utilizando a configuração final.
 - `git diff --check`: sem erros de whitespace.
 
-## Revisão humana pendente
-
-Pendente revisão humana do código, contrato HTTP, limites de validação, tratamento
-transacional e testes. Nenhuma aprovação ou revisão humana foi presumida.
-O comportamento de registro para pares previamente REVOGADA permanece fora do escopo.
-
 # Uso da IA — consulta da agenda de parcelas
 
 ## Tarefa e orientações
@@ -228,5 +222,60 @@ constraint trigger adiado até o commit, removido no finally. A concorrência
 entre dois processadores retornou uma execução efetiva e outra ignorada.
 `git diff --check`: sem erros de whitespace.
 
-Pendente revisão humana do código e dos testes. A aprovação humana registrada
-refere-se à modelagem proposta, não a uma revisão ou execução humana dos testes.
+# Uso da IA — retry no processamento assíncrono
+
+## Tarefa e orientações
+
+Analisar central-convenios e apresentar plano antes das alterações. Implementar
+até cinco tentativas, backoff de 5/10/20/40 segundos, classificação técnica,
+rollback e registro independente, estado FALHA_TECNICA com reservas preservadas,
+proteção concorrente, testes PostgreSQL/Testcontainers e documentação. Preservar
+@Scheduled, locks, revalidações, Clock, camadas e migrations existentes. Não
+alterar backend/frontend, dependências nem o arquivo preexistente não rastreado
+docs/analise-tecnica-implementacao.md.
+
+## Resultado
+
+Plano apresentado após leitura do serviço, entidade, repositories, migrations,
+testes e documentação. V9 adicionada após confirmar V8 como última migration.
+Entidade e enum incluem metadados de retry e estado técnico terminal. Seleção
+de lote e revalidação verificam próximo horário. Falhas são registradas após
+rollback em REQUIRES_NEW, com lock, status e contador revalidados. Erros têm
+mensagens fixas sem dados originais; não há retry genérico de RuntimeException.
+Tentativas incluem conclusões de sucesso/rejeição; ultimo_erro preserva a última
+falha. Criada ADR-0003 com classificação e limites da janela rollback/registro.
+README atualizado. Nenhuma revisão humana foi presumida.
+
+Testes ampliados na feature operacao: falhas reais de commit, progressão temporal,
+limite, recuperação, erro permanente e não classificado, concorrência de falhas,
+registro tardio após sucesso e reservas/histórico. Uso limitado de doubles que
+delegam aos repositories reais para controlar a janela de concorrência e falhas
+de programação; o banco, os locks e as transações continuam reais.
+
+## Validações em andamento
+
+A tentativa inicial de ./mvnw test foi bloqueada pela escrita no cache Maven.
+Com acesso autorizado a Maven/Docker, a execução inicial de OperacaoIntegracaoTest
+teve 21 testes, zero falhas e um erro na instrumentação Mockito de um proxy Spring
+no cenário de registro tardio. Substituído o spy do proxy por mock de interface
+com delegação ao repository real. Acrescentados cenários de falhas concorrentes
+e RuntimeException não classificada. Suíte completa executada em seguida;
+resultado final registrado abaixo.
+
+## Validação final
+
+- ./mvnw test em central-convenios, com acesso autorizado ao cache e Docker:
+  BUILD SUCCESS, 41 testes, zero falhas, zero erros e zero ignorados.
+- OperacaoIntegracaoTest: 23 testes, incluindo os seis novos cenários e o teste
+  existente de rollback ajustado para SQLSTATE transitório e espera por Clock.
+- Integrações usam PostgreSQL 17 via Testcontainers. Flyway validou/aplicou V1–V9
+  e Hibernate validou o esquema. O teste de migração existente também passou,
+  aplicando as migrations novas sobre vínculos anteriores à V7 em esquema isolado.
+- O teste de contexto existente utilizou o PostgreSQL local localhost:5434 e
+  aplicou V9 nele, com agendamento desabilitado. Não foram alteradas suas configurações.
+- Maven emitiu avisos HTTP 401 de metadados de repositórios externos; o build passou.
+- git diff --check: sem erros de whitespace.
+
+Limites: queda/indisponibilidade durante registro independente pode perder a
+contabilização; não há reconciliação automática nem diário de cada tentativa.
+Detalhes em ADR-0003.

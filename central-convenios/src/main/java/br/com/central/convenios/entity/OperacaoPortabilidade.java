@@ -1,6 +1,5 @@
 package br.com.central.convenios.entity;
 
-import br.com.central.convenios.dto.OperacaoRequisicaoDTO;
 import br.com.central.convenios.exception.RegraNegocioException;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
@@ -12,6 +11,10 @@ import java.util.UUID;
 @Entity
 @Table(name = "operacoes_portabilidade")
 public class OperacaoPortabilidade {
+
+    private static final int MAX_TENTATIVAS = 5;
+    private static final long BACKOFF_INICIAL_SEGUNDOS = 5;
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID protocolo;
@@ -43,6 +46,15 @@ public class OperacaoPortabilidade {
 
     @Column(name = "motivo_rejeicao")
     private String motivoRejeicao;
+
+    @Column(name = "tentativas_processamento", nullable = false)
+    private int tentativasProcessamento;
+
+    @Column(name = "proxima_tentativa_em")
+    private OffsetDateTime proximaTentativaEm;
+
+    @Column(name = "ultimo_erro", length = 255)
+    private String ultimoErro;
 
     @ElementCollection
     @CollectionTable(name = "operacoes_parcelas", joinColumns = @JoinColumn(name = "operacao_protocolo"))
@@ -86,10 +98,31 @@ public class OperacaoPortabilidade {
         if (status != StatusOperacao.PENDENTE) {
             throw new RegraNegocioException("Operação já finalizada");
         }
+        tentativasProcessamento++;
+        proximaTentativaEm = null;
         status = motivo == null ? StatusOperacao.CONFIRMADA : StatusOperacao.REJEITADA;
         dataProcessamento = data;
         motivoRejeicao = motivo;
     }
+
+    public void registrarFalha(OffsetDateTime agora, boolean transitoria, String erro) {
+        if (status != StatusOperacao.PENDENTE) {
+            throw new RegraNegocioException("Operação já finalizada");
+        }
+        tentativasProcessamento++;
+        ultimoErro = erro;
+        if (!transitoria || tentativasProcessamento >= MAX_TENTATIVAS) {
+            status = StatusOperacao.FALHA_TECNICA;
+            dataProcessamento = agora;
+            proximaTentativaEm = null;
+        } else {
+            proximaTentativaEm = agora.plusSeconds(BACKOFF_INICIAL_SEGUNDOS << (tentativasProcessamento - 1));
+        }
+    }
+
+    public int getTentativasProcessamento() { return tentativasProcessamento; }
+
+    public OffsetDateTime getProximaTentativaEm() { return proximaTentativaEm; }
 
     public String getBeneficiarioId() {
         return beneficiarioId;

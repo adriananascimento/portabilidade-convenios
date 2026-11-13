@@ -377,8 +377,8 @@ class OperacaoIntegracaoTest extends BaseCentralConveniosTest {
         jdbc.execute("""
                 CREATE OR REPLACE FUNCTION falhar_finalizacao_teste() RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN
-                    IF NEW.beneficiario_id = '%s' THEN
-                        RAISE EXCEPTION 'Falha simulada no processamento';
+                    IF NEW.beneficiario_id = '%s' AND NEW.status IN ('CONFIRMADA', 'REJEITADA') THEN
+                        RAISE EXCEPTION 'Falha simulada no processamento' USING ERRCODE = '40001';
                     END IF;
                     RETURN NEW;
                 END $$
@@ -392,12 +392,202 @@ class OperacaoIntegracaoTest extends BaseCentralConveniosTest {
             assertThat(json.get("dataProcessamento").isNull()).isTrue();
             assertThat(json.get("motivoRejeicao").isNull()).isTrue();
             assertThat(reservas(protocolo)).isEqualTo(2);
+            assertThat(tentativas(protocolo)).isEqualTo(1);
         } finally {
             jdbc.execute("DROP TRIGGER falha_processamento_teste ON operacoes_portabilidade");
             jdbc.execute("DROP FUNCTION falhar_finalizacao_teste()");
         }
-        assertThat(processamento.processar(protocolo)).isTrue();
+        assertThat(processadorEm(AGORA.plusSeconds(5)).processar(protocolo)).isTrue();
         assertThat(reservas(protocolo)).isZero();
+    }
+
+    @Autowired br.com.central.convenios.repository.OperacaoRepository operacoes;
+    @Autowired br.com.central.convenios.repository.ParcelaRepository parcelas;
+    @Autowired br.com.central.convenios.repository.AutorizacaoRepository autorizacoes;
+    @Autowired br.com.central.convenios.repository.ReservaRepository repositorioReservas;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transacoes;
+
+    private ProcessamentoOperacaoService processadorEm(OffsetDateTime instante) {
+        return new ProcessamentoOperacaoService(operacoes, parcelas, autorizacoes, repositorioReservas,
+                Clock.fixed(instante.toInstant(), ZoneOffset.UTC), transacoes, Duration.ofSeconds(10));
+    }
+
+    private int tentativas(UUID protocolo) {
+        return jdbc.queryForObject("SELECT tentativas_processamento FROM operacoes_portabilidade WHERE protocolo = ?",
+                Integer.class, protocolo);
+    }
+
+    private OffsetDateTime proxima(UUID protocolo) {
+        return jdbc.queryForObject("SELECT proxima_tentativa_em FROM operacoes_portabilidade WHERE protocolo = ?",
+                OffsetDateTime.class, protocolo);
+    }
+
+    private void instalarFalha(UUID protocolo, String estado) {
+        jdbc.execute("""
+                CREATE OR REPLACE FUNCTION falhar_retry_teste() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.protocolo = '%s' AND NEW.status IN ('CONFIRMADA', 'REJEITADA') THEN
+                        RAISE EXCEPTION 'senha=segredo conta=123456 beneficiario privado'
+                            USING ERRCODE = '%s';
+                    END IF;
+                    RETURN NEW;
+                END $$
+                """.formatted(protocolo, estado));
+        jdbc.execute("CREATE CONSTRAINT TRIGGER falha_retry_teste AFTER UPDATE ON operacoes_portabilidade "
+                + "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION falhar_retry_teste()");
+    }
+
+    private void removerFalha() {
+        jdbc.execute("DROP TRIGGER falha_retry_teste ON operacoes_portabilidade");
+        jdbc.execute("DROP FUNCTION falhar_retry_teste()");
+    }
+
+    @Test
+    void deveAplicarBackoffAteQuintaFalhaSemLiberarReservas() throws Exception {
+        var protocolo = registrar(UUID.randomUUID().toString(), preparar("ATIVA"));
+        aguardarElegibilidade(protocolo);
+        instalarFalha(protocolo, "40001");
+        try {
+            var instante = AGORA;
+            for (int tentativa = 1; tentativa <= 5; tentativa++) {
+                var processador = processadorEm(instante);
+                assertThatThrownBy(() -> processador.processar(protocolo)).isInstanceOf(RuntimeException.class);
+                assertThat(tentativas(protocolo)).isEqualTo(tentativa);
+                assertThat(reservas(protocolo)).isEqualTo(2);
+                assertThat(jdbc.queryForObject("SELECT ultimo_erro FROM operacoes_portabilidade WHERE protocolo = ?",
+                        String.class, protocolo)).isEqualTo("Falha transitória de infraestrutura");
+                if (tentativa < 5) {
+                    var esperado = instante.plusSeconds(5L << (tentativa - 1));
+                    assertThat(proxima(protocolo)).isEqualTo(esperado);
+                    assertThat(processadorEm(esperado.minusNanos(1000)).processar(protocolo)).isFalse();
+                    processadorEm(esperado.minusNanos(1000)).processarPendentes();
+                    assertThat(tentativas(protocolo)).isEqualTo(tentativa);
+                    instante = esperado;
+                }
+            }
+            assertThat(mapper.readTree(consultar(protocolo).body()).get("status").asText()).isEqualTo("FALHA_TECNICA");
+            assertThat(proxima(protocolo)).isNull();
+            assertThat(processadorEm(instante.plusDays(1)).processar(protocolo)).isFalse();
+            processadorEm(instante.plusDays(1)).processarPendentes();
+            assertThat(tentativas(protocolo)).isEqualTo(5);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM operacoes_parcelas WHERE operacao_protocolo = ?",
+                    Integer.class, protocolo)).isEqualTo(2);
+        } finally { removerFalha(); }
+    }
+
+    @Test
+    void deveConfirmarAposFalhaTransitoriaNoHorarioElegivel() throws Exception {
+        var protocolo = registrar(UUID.randomUUID().toString(), preparar("ATIVA"));
+        aguardarElegibilidade(protocolo);
+        instalarFalha(protocolo, "40P01");
+        try { processamento.processarPendentes(); } finally { removerFalha(); }
+        assertThat(tentativas(protocolo)).isEqualTo(1);
+        processamento.processarPendentes();
+        assertThat(tentativas(protocolo)).isEqualTo(1);
+        processadorEm(AGORA.plusSeconds(5)).processarPendentes();
+        assertThat(tentativas(protocolo)).isEqualTo(2);
+        assertThat(proxima(protocolo)).isNull();
+        assertThat(mapper.readTree(consultar(protocolo).body()).get("status").asText()).isEqualTo("CONFIRMADA");
+        assertThat(reservas(protocolo)).isEqualTo(2);
+    }
+
+    @Test
+    void deveEncerrarFalhaPermanenteSemRetry() throws Exception {
+        var protocolo = registrar(UUID.randomUUID().toString(), preparar("ATIVA"));
+        aguardarElegibilidade(protocolo);
+        instalarFalha(protocolo, "23514");
+        try {
+            assertThatThrownBy(() -> processamento.processar(protocolo)).isInstanceOf(RuntimeException.class);
+        } finally { removerFalha(); }
+        assertThat(tentativas(protocolo)).isEqualTo(1);
+        assertThat(proxima(protocolo)).isNull();
+        assertThat(mapper.readTree(consultar(protocolo).body()).get("status").asText()).isEqualTo("FALHA_TECNICA");
+        assertThat(processadorEm(AGORA.plusDays(1)).processar(protocolo)).isFalse();
+        assertThat(reservas(protocolo)).isEqualTo(2);
+    }
+
+    @Test
+    void falhasConcorrentesDevemRespeitarBackoffSemDuplicarRegistro() throws Exception {
+        var protocolo = registrar(UUID.randomUUID().toString(), preparar("ATIVA"));
+        aguardarElegibilidade(protocolo);
+        instalarFalha(protocolo, "40001");
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var barreira = new CyclicBarrier(2);
+            Callable<Boolean> tarefa = () -> {
+                barreira.await(10, TimeUnit.SECONDS);
+                try { return processamento.processar(protocolo); }
+                catch (RuntimeException esperada) { return false; }
+            };
+            var primeira = executor.submit(tarefa);
+            var segunda = executor.submit(tarefa);
+            assertThat(primeira.get(30, TimeUnit.SECONDS)).isFalse();
+            assertThat(segunda.get(30, TimeUnit.SECONDS)).isFalse();
+            assertThat(tentativas(protocolo)).isEqualTo(1);
+            assertThat(proxima(protocolo)).isEqualTo(AGORA.plusSeconds(5));
+            assertThat(reservas(protocolo)).isEqualTo(2);
+        } finally { removerFalha(); }
+    }
+
+    @Test
+    void runtimeExceptionNaoClassificadaNaoDeveSerRepetida() throws Exception {
+        var protocolo = registrar(UUID.randomUUID().toString(), preparar("ATIVA"));
+        aguardarElegibilidade(protocolo);
+        var repositorio = org.mockito.Mockito.mock(br.com.central.convenios.repository.ParcelaRepository.class,
+                org.mockito.AdditionalAnswers.delegatesTo(parcelas));
+        org.mockito.Mockito.doThrow(new IllegalStateException("senha=segredo"))
+                .when(repositorio).buscarParaReserva(org.mockito.ArgumentMatchers.any());
+        var processador = new ProcessamentoOperacaoService(operacoes, repositorio, autorizacoes,
+                repositorioReservas, Clock.fixed(AGORA.toInstant(), ZoneOffset.UTC), transacoes, Duration.ofSeconds(10));
+        assertThatThrownBy(() -> processador.processar(protocolo)).isInstanceOf(IllegalStateException.class);
+        assertThat(tentativas(protocolo)).isEqualTo(1);
+        assertThat(proxima(protocolo)).isNull();
+        assertThat(mapper.readTree(consultar(protocolo).body()).get("status").asText()).isEqualTo("FALHA_TECNICA");
+        assertThat(reservas(protocolo)).isEqualTo(2);
+    }
+
+    @Test
+    void registroTardioDeFalhaNaoDeveSobrescreverSucesso() throws Exception {
+        var protocolo = registrar(UUID.randomUUID().toString(), preparar("ATIVA"));
+        aguardarElegibilidade(protocolo);
+        var repositorio = org.mockito.Mockito.mock(br.com.central.convenios.repository.OperacaoRepository.class,
+                org.mockito.AdditionalAnswers.delegatesTo(operacoes));
+        var falhou = new java.util.concurrent.atomic.AtomicBoolean();
+        var rollbackConcluido = new CountDownLatch(1);
+        var sucessoConcluido = new CountDownLatch(1);
+        org.mockito.Mockito.doAnswer(invocacao -> {
+            if (falhou.compareAndSet(false, true)) {
+                operacoes.flush();
+                throw new org.springframework.dao.CannotAcquireLockException("dado privado");
+            }
+            operacoes.flush();
+            return null;
+        }).when(repositorio).flush();
+        var chamadas = new java.util.concurrent.atomic.AtomicInteger();
+        org.mockito.Mockito.doAnswer(invocacao -> {
+            if (chamadas.incrementAndGet() == 2) {
+                rollbackConcluido.countDown();
+                assertThat(sucessoConcluido.await(10, TimeUnit.SECONDS)).isTrue();
+            }
+            return operacoes.buscarParaProcessamento(protocolo);
+        }).when(repositorio).buscarParaProcessamento(protocolo);
+        var processador = new ProcessamentoOperacaoService(repositorio, parcelas, autorizacoes,
+                repositorioReservas, Clock.fixed(AGORA.toInstant(), ZoneOffset.UTC), transacoes, Duration.ofSeconds(10));
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var falha = executor.submit(() -> {
+                assertThatThrownBy(() -> processador.processar(protocolo))
+                        .isInstanceOf(org.springframework.dao.CannotAcquireLockException.class);
+            });
+            try {
+                assertThat(rollbackConcluido.await(10, TimeUnit.SECONDS)).isTrue();
+                assertThat(processamento.processar(protocolo)).isTrue();
+            } finally { sucessoConcluido.countDown(); }
+            falha.get(20, TimeUnit.SECONDS);
+        }
+        assertThat(tentativas(protocolo)).isEqualTo(1);
+        assertThat(mapper.readTree(consultar(protocolo).body()).get("status").asText()).isEqualTo("CONFIRMADA");
+        assertThat(jdbc.queryForObject("SELECT ultimo_erro FROM operacoes_portabilidade WHERE protocolo = ?",
+                String.class, protocolo)).isNull();
+        assertThat(reservas(protocolo)).isEqualTo(2);
     }
 
 }

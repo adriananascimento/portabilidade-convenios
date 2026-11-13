@@ -20,9 +20,11 @@ public interface OperacaoRepository extends JpaRepository<OperacaoPortabilidade,
     @Query(value = """
             SELECT protocolo FROM operacoes_portabilidade
             WHERE status = 'PENDENTE' AND data_criacao <= :limite
+              AND (proxima_tentativa_em IS NULL OR proxima_tentativa_em <= :agora)
             ORDER BY data_criacao, protocolo LIMIT 100
             """, nativeQuery = true)
-    List<UUID> buscarPendentes(@Param("limite") OffsetDateTime limite);
+    List<UUID> buscarPendentes(@Param("limite") OffsetDateTime limite,
+                              @Param("agora") OffsetDateTime agora);
 
     @EntityGraph(attributePaths = "parcelasIds")
     Optional<OperacaoPortabilidade> findByChaveIdempotencia(UUID chave);
