@@ -324,3 +324,28 @@ Testes do cliente HTTP, sem dependências adicionais:
 ```bash
 node --test frontend/tests/operacoesApi.test.mjs
 ```
+
+## Estrutura de persistência local do backend
+
+O backend usa seu próprio PostgreSQL na porta 5433. Para executar e testar:
+
+```sh
+cd backend
+docker compose up -d --wait
+./mvnw test
+./mvnw spring-boot:run
+```
+
+A migration V1 cria as operações locais e os identificadores das parcelas.
+A entidade mantém conta de destino, status de integração separado do status
+oficial, UUID local, chave de idempotência e datas. O protocolo e o status oficial
+podem ser nulos. O Hibernate valida o esquema criado pelo Flyway.
+Esta etapa disponibiliza somente a persistência: os endpoints existentes ainda
+utilizam a Central e não gravam esse histórico local.
+
+`OperacaoPersistenciaTest` aplica a migration em schema temporário exclusivo no
+PostgreSQL configurado e o remove ao final; requer permissão para criar schemas.
+As transações de teste são revertidas, sem limpar as tabelas existentes.
+Configurações do datasource podem ser sobrescritas pelas variáveis padrão
+`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`.
+A decisão está na [ADR-0005](docs/adr/0005-persistencia-local-operacoes-portabilidade.md).

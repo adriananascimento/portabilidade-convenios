@@ -63,3 +63,31 @@ edição são documentais e não substituem testes das aplicações.
 - Execução: primeira tentativa Maven foi bloqueada pelo sandbox no cache .m2;
   repetição com permissão de execução ampliada concluiu os testes. Maven emitiu
   avisos HTTP 401 para metadados de repositórios externos, sem impedir o build.
+
+## Persistência local de operações — 14/11/2026
+
+- Tarefa solicitada: analisar as configurações e implementar somente a estrutura
+  local de persistência, sem modificar Central, frontend ou fluxos existentes.
+- Aprovação humana: o usuário aprovou parcelas como coleção de identificadores,
+  conta embutida, UUIDs, datas e constraints. Solicitou separar `StatusIntegracao`
+  de `StatusOperacao`, mantendo o segundo inicialmente nulo.
+- Trabalho do Codex: entidade `OperacaoPortabilidade`, embutível `ContaDestino`,
+  dois enums, repository JPA, migration V1, testes de persistência, README e
+  ADR-0005. Não foram adicionadas dependências nem removidas configurações.
+- Testes: `cd backend && ./mvnw test` — BUILD SUCCESS; 22 testes, zero falhas,
+  erros ou ignorados. Inclui 17 casos novos em `OperacaoPersistenciaTest` e os
+  cinco testes preexistentes do backend.
+- Cobertura nova: leitura por chave idempotente, UUID local, conta e parcelas,
+  status/protocolo inicialmente nulos, atualização de status e datas preservando
+  criação, chave duplicada, campos obrigatórios, CHECKs dos enums, parcelas
+  duplicadas, FK local e identificador de parcela nulo. A mesma parcela é aceita
+  em operações diferentes. Flyway e validação Hibernate executados em PostgreSQL.
+- Isolamento: os casos novos usam schema aleatório temporário, removido ao final,
+  e rollback por teste. O teste de contexto existente continua usando a
+  configuração padrão e aplica migrations pendentes no banco local do backend.
+- Execução: a primeira tentativa Maven foi impedida pelo sandbox ao acessar os
+  locks do cache .m2; a execução com permissão ampliada concluiu com sucesso.
+  `git diff --check` também passou.
+- Revisão humana: a modelagem foi aprovada antes da implementação. Alterações preexistentes em
+  outros arquivos foram preservadas. Os arquivos de status do compilador em
+  `backend/target` são gerados pelo Maven durante a validação.
