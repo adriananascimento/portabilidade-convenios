@@ -74,18 +74,4 @@ public class CentralConveniosClient {
         }
     }
 
-    public OperacaoPaginaDTO listarOperacoes(int pagina, int tamanho) {
-        try {
-            var resposta = restClient.get()
-                    .uri(uri -> uri.path("/operacoes-portabilidade").queryParam("pagina", pagina)
-                            .queryParam("tamanho", tamanho).build())
-                    .retrieve()
-                    .body(OperacaoPaginaDTO.class);
-            if (resposta == null) throw new CentralIndisponivelException(
-                    new IllegalStateException("Resposta vazia da Central"));
-            return resposta;
-        } catch (RestClientException excecao) {
-            throw new CentralIndisponivelException(excecao);
-        }
-    }
 }

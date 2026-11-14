@@ -302,8 +302,17 @@ Data Grid consulta `GET /api/operacoes?pagina=0&tamanho=10` e permite selecionar
 página. Há indicação de carregamento, listagem vazia e erro com nova tentativa.
 
 O contrato paginado contém `conteudo`, `pagina`, `tamanho`, `totalElementos` e
-`totalPaginas`. Cada operação contém protocolo, status, beneficiário e data de criação.
-A coluna Ações permanece reservada, sem controles.
+`totalPaginas`. Cada operação agora contém `id`, `beneficiarioId`, `dataCriacao` local,
+`statusIntegracao`, `statusOperacao` e `protocoloCentral`. Os dois últimos podem
+ser nulos. Não há aliases `protocolo` e `status` no GET. O POST mantém seu contrato.
+
+O frontend usa um tipo exclusivo para a listagem e o `id` local para identificar
+as linhas. A tabela apresenta separadamente status da integração e da operação,
+com Chips no padrão visual existente. Quando o status da operação é nulo,
+mostra “Aguardando envio” se a integração estiver em `PENDENTE_ENVIO` e
+“Não informado” nos demais casos. Protocolo nulo aparece como “Não informado”.
+Operações com falha de integração também são exibidas. O formulário de criação
+mantém seu contrato com `protocolo` e `status`; não há polling.
 
 Clique em **Nova operação**, informe o beneficiário e use **Consultar parcelas**.
 Selecione as parcelas disponíveis, confira o total e preencha banco, agência e
@@ -340,8 +349,24 @@ A migration V1 cria as operações locais e os identificadores das parcelas.
 A entidade mantém conta de destino, status de integração separado do status
 oficial, UUID local, chave de idempotência e datas. O protocolo e o status oficial
 podem ser nulos. O Hibernate valida o esquema criado pelo Flyway.
-Esta etapa disponibiliza somente a persistência: os endpoints existentes ainda
-utilizam a Central e não gravam esse histórico local.
+O POST `/api/operacoes` persiste `PENDENTE_ENVIO` antes de chamar a Central,
+sem transação aberta durante o HTTP. A V2 preserva a data de criação remota e
+aceita o status oficial `FALHA_TECNICA`. Sucesso e repetição bem-sucedida retornam
+202; chave com conteúdo divergente retorna 409. Somente quem cria o registro
+local pode enviá-lo, inclusive sob concorrência entre instâncias.
+
+Operações existentes sem protocolo não são reenviadas e retornam 503.
+`PENDENTE_ENVIO` e `ENVIO_INDETERMINADO` podem ficar paradas após falhas ou
+reinicialização. Recuperação com retry e backoff será implementada posteriormente.
+Não há polling, auditoria ou retry automático. A listagem consulta exclusivamente o banco local com `Pageable`, por
+`dataCriacao DESC, id DESC`, inclusive registros sem protocolo. Os parâmetros
+`pagina` (padrão 0) e `tamanho` (padrão 10, entre 1 e 100), suas validações e os
+metadados da página foram preservados. Não há sincronização de status durante
+essa consulta; os estados retornados são os persistidos localmente.
+Detalhes e classificação das falhas: [ADR-0006](docs/adr/0006-criacao-local-e-integracao-idempotente.md).
+
+`OperacaoCriacaoTest` também usa schema isolado para validar criação, repetição,
+concorrência e falhas. `OperacaoClientTest` valida o contrato HTTP do client.
 
 `OperacaoPersistenciaTest` aplica a migration em schema temporário exclusivo no
 PostgreSQL configurado e o remove ao final; requer permissão para criar schemas.
@@ -349,3 +374,13 @@ As transações de teste são revertidas, sem limpar as tabelas existentes.
 Configurações do datasource podem ser sobrescritas pelas variáveis padrão
 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`.
 A decisão está na [ADR-0005](docs/adr/0005-persistencia-local-operacoes-portabilidade.md).
+
+
+`OperacaoListagemTest` valida paginação, desempate por ID, página fora do total,
+lista vazia, contrato JSON, campos nulos e ausência de chamadas à Central usando
+repository e PostgreSQL reais em schema temporário. Executar com:
+
+```sh
+cd backend
+./mvnw -Dtest=OperacaoListagemTest test
+```

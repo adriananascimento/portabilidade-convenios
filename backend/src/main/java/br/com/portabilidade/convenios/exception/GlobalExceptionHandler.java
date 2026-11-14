@@ -9,12 +9,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(ConflitoException.class)
+    public ProblemDetail tratarConflito(ConflitoException excecao) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, excecao.getMessage());
+    }
+
     @ExceptionHandler(CentralIndisponivelException.class)
     public ResponseEntity<ProblemDetail> tratarCentralIndisponivel(CentralIndisponivelException excecao) {
         ProblemDetail problema = ProblemDetail.forStatus(HttpStatus.SERVICE_UNAVAILABLE);
 
         problema.setTitle("Serviço indisponível");
-        problema.setDetail("Não foi possível comunicar com a Central de Convênios.");
+        problema.setDetail(excecao.getCause() == null ? excecao.getMessage()
+                : "Não foi possível comunicar com a Central de Convênios.");
 
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problema);
     }

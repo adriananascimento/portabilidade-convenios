@@ -2,13 +2,7 @@ package br.com.portabilidade.convenios.dto;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
-
-enum StatusOperacao {
-    PENDENTE,
-    CONFIRMADA,
-    REJEITADA,
-    FALHA_TECNICA
-}
+import br.com.portabilidade.convenios.entity.StatusOperacao;
 
 public record OperacaoRespostaDTO(
         UUID protocolo,

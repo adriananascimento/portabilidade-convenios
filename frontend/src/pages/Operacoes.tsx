@@ -5,7 +5,7 @@ import {DataGrid, type GridColDef, type GridPaginationModel} from '@mui/x-data-g
 import {ptBR} from '@mui/x-data-grid/locales'
 import {OperacaoForm} from '../components/OperacaoForm'
 import {listarOperacoes} from '../api/operacoesApi'
-import type {OperacaoResposta, OperacoesPagina, StatusOperacao} from '../types/operacao'
+import type {OperacaoListagem, OperacoesPagina, StatusIntegracao, StatusOperacao} from '../types/operacao'
 
 const tema = createTheme({
   palette: {
@@ -21,20 +21,40 @@ const tema = createTheme({
 const coresStatus: Record<StatusOperacao, 'warning' | 'success' | 'error'> = {
   PENDENTE: 'warning', CONFIRMADA: 'success', REJEITADA: 'error', FALHA_TECNICA: 'error',
 }
-const colunas: GridColDef<OperacaoResposta>[] = [
-  {field: 'protocolo', headerName: 'Protocolo', flex: 1.5, minWidth: 310},
+const rotulosStatus: Record<StatusOperacao, string> = {
+  PENDENTE: 'Pendente', CONFIRMADA: 'Confirmada', REJEITADA: 'Rejeitada', FALHA_TECNICA: 'Falha técnica',
+}
+const integracoes: Record<StatusIntegracao, {rotulo: string; cor: 'warning' | 'success' | 'error'}> = {
+  PENDENTE_ENVIO: {rotulo: 'Pendente de envio', cor: 'warning'},
+  ENVIADA: {rotulo: 'Enviada', cor: 'success'},
+  FALHA_ENVIO: {rotulo: 'Falha no envio', cor: 'error'},
+  ENVIO_INDETERMINADO: {rotulo: 'Envio indeterminado', cor: 'warning'},
+}
+const colunas: GridColDef<OperacaoListagem>[] = [
+  {
+    field: 'protocoloCentral', headerName: 'Protocolo na Central', flex: 1.5, minWidth: 310,
+    valueFormatter: valor => valor ?? 'Não informado',
+  },
   {field: 'beneficiarioId', headerName: 'Beneficiário', flex: 1, minWidth: 160},
   {
     field: 'dataCriacao', headerName: 'Data de criação', flex: 1, minWidth: 190,
     valueFormatter: valor => new Date(valor as string).toLocaleString('pt-BR'),
   },
   {
-    field: 'status', headerName: 'Status', minWidth: 170,
-    renderCell: ({row}) => <Chip label={row.status === 'FALHA_TECNICA' ? 'Falha técnica' : row.status} size="small" color={coresStatus[row.status]} variant="outlined" />,
+    field: 'statusIntegracao', headerName: 'Status da integração', minWidth: 200,
+    renderCell: ({row}) => <Chip label={integracoes[row.statusIntegracao].rotulo} size="small"
+      color={integracoes[row.statusIntegracao].cor} variant="outlined" />,
+  },
+  {
+    field: 'statusOperacao', headerName: 'Status da operação', minWidth: 180,
+    renderCell: ({row}) => <Chip label={row.statusOperacao === null
+      ? row.statusIntegracao === 'PENDENTE_ENVIO' ? 'Aguardando envio' : 'Não informado'
+      : rotulosStatus[row.statusOperacao]} size="small"
+      color={row.statusOperacao === null ? 'default' : coresStatus[row.statusOperacao]} variant="outlined" />,
   },
   {field: 'acoes', headerName: 'Ações', minWidth: 100, renderCell: () => null},
 ]
-const identificarOperacao = (operacao: OperacaoResposta) => operacao.protocolo
+const identificarOperacao = (operacao: OperacaoListagem) => operacao.id
 
 export function Operacoes() {
   const [formularioAberto, setFormularioAberto] = useState(false)

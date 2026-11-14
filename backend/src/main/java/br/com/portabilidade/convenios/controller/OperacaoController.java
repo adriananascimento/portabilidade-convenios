@@ -4,6 +4,7 @@ import br.com.portabilidade.convenios.dto.*;
 import br.com.portabilidade.convenios.exception.RequisicaoInvalidaException;
 import br.com.portabilidade.convenios.service.AutorizacaoService;
 import br.com.portabilidade.convenios.service.OperacaoService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,7 +31,7 @@ public class OperacaoController {
     }
 
     @PostMapping
-    public ResponseEntity<OperacaoRespostaDTO> criarOperacao(@RequestBody CriarOperacaoRequestDTO request,
+    public ResponseEntity<OperacaoRespostaDTO> criarOperacao(@Valid @RequestBody CriarOperacaoRequestDTO request,
                                                              @RequestHeader("Idempotency-Key") UUID chaveIdempotencia) {
         return service.criarOperacao(request, chaveIdempotencia);
     }

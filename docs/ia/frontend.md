@@ -142,3 +142,30 @@ atividades ao frontend apenas para preencher este documento.
 - Limitações: GET localhost:8080 falhou por conexão recusada (HTTP 000); sem
   integração real, inspeção visual ou teste ponta a ponta em navegador.
   Revisão humana ainda não registrada para esta implementação.
+
+
+## Adaptação da listagem ao banco local — 14/11/2026
+
+- Ferramenta: Codex para inspeção, implementação e validação.
+- Aprovação humana: proposta aprovada antes de editar; usuário determinou
+  “Aguardando envio” somente quando `statusOperacao` for nulo e a integração
+  estiver `PENDENTE_ENVIO`, e “Não informado” nos outros casos nulos.
+- Contrato conferido no backend: `StatusOperacao` contém `PENDENTE`, `CONFIRMADA`,
+  `REJEITADA` e `FALHA_TECNICA`, compatíveis com o tipo TypeScript já existente.
+  `StatusIntegracao` contém `PENDENTE_ENVIO`, `ENVIADA`, `FALHA_ENVIO` e
+  `ENVIO_INDETERMINADO`.
+- Implementação: tipo `OperacaoListagem` separado de `OperacaoResposta` da
+  criação, campos anuláveis explícitos e `OperacoesPagina` adaptado. DataGrid
+  identifica linhas por `id` e apresenta protocolo opcional e dois status com
+  Chips e rótulos em português. Nenhum filtro exclui falhas de integração.
+- Preservados layout, paginação no servidor, cancelamento, loading, vazio,
+  erro/nova tentativa e formulário de criação. Backend e Central não alterados;
+  sem polling nem novas dependências. README atualizado.
+- Testes HTTP ampliados com paginação, IDs locais, todas as situações de
+  integração, campos nulos, vazio, erro HTTP e erro de rede. Os testes existentes
+  de agenda e criação foram preservados.
+- Validação: `npm run build --prefix frontend` e `npm run lint --prefix frontend`
+  passaram; `node --test frontend/tests/*.test.mjs`: oito testes passaram,
+  zero falhas. `git diff --check` passou. Vite avisou sobre chunk acima de 500 kB.
+- Limitações: testes HTTP usam fetch simulado; sem teste visual ou ponta a ponta
+  em navegador. Revisão humana final ainda não registrada.

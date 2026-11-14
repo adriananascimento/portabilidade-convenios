@@ -1,15 +1,22 @@
 package br.com.portabilidade.convenios.dto;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import java.util.List;
 
-record ContaDestinoDTO(
-        String banco,
-        String agencia,
-        String conta
-) {}
-
 public record CriarOperacaoRequestDTO(
+        @NotBlank @Size(max = 100)
         String beneficiarioId,
-        List<String> parcelasIds,
+
+        @NotEmpty
+        List<@NotBlank @Size(max = 100) String> parcelasIds,
+
+        @NotNull @Valid
         ContaDestinoDTO contaDestino
-) {}
+) {
+    public record ContaDestinoDTO(
+            @NotBlank @Size(max = 100) String banco,
+            @NotBlank @Size(max = 100) String agencia,
+            @NotBlank @Size(max = 100) String conta
+    ) {}
+}

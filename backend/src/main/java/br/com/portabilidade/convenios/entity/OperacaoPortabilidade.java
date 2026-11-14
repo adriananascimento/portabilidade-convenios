@@ -21,6 +21,9 @@ public class OperacaoPortabilidade {
     @Column(name = "protocolo_central")
     private UUID protocoloCentral;
 
+    @Column(name = "data_criacao_central")
+    private OffsetDateTime dataCriacaoCentral;
+
     @Column(name = "beneficiario_id", nullable = false, length = 100)
     private String beneficiarioId;
 
@@ -67,6 +70,9 @@ public class OperacaoPortabilidade {
     private void atualizarData() {
         dataAtualizacao = OffsetDateTime.now(ZoneOffset.UTC);
     }
+
+    public OffsetDateTime getDataCriacaoCentral() { return dataCriacaoCentral; }
+    public void setDataCriacaoCentral(OffsetDateTime data) { dataCriacaoCentral = data; }
 
     public UUID getId() { return id; }
     public UUID getChaveIdempotencia() { return chaveIdempotencia; }

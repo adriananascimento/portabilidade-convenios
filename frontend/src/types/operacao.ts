@@ -7,8 +7,19 @@ export interface OperacaoResposta {
   beneficiarioId: string
 }
 
+export type StatusIntegracao = 'PENDENTE_ENVIO' | 'ENVIADA' | 'FALHA_ENVIO' | 'ENVIO_INDETERMINADO'
+
+export interface OperacaoListagem {
+  id: string
+  beneficiarioId: string
+  dataCriacao: string
+  statusIntegracao: StatusIntegracao
+  statusOperacao: StatusOperacao | null
+  protocoloCentral: string | null
+}
+
 export interface OperacoesPagina {
-  conteudo: OperacaoResposta[]
+  conteudo: OperacaoListagem[]
   pagina: number
   tamanho: number
   totalElementos: number
