@@ -384,3 +384,21 @@ repository e PostgreSQL reais em schema temporário. Executar com:
 cd backend
 ./mvnw -Dtest=OperacaoListagemTest test
 ```
+
+### Histórico de auditoria das operações
+
+`GET /api/operacoes/{id}/eventos` consulta pelo **UUID local** retornado na listagem
+(de modo distinto do protocolo da Central). Retorna uma lista com `id`, `tipo`,
+`descricao`, `dataCriacao`, `statusIntegracaoAnterior`, `statusIntegracaoNovo`,
+`statusOperacaoAnterior`, `statusOperacaoNovo` e `protocoloCentral`. Campos sem
+aplicação ao acontecimento são nulos. Ordem: `dataCriacao ASC, id ASC`.
+Operação inexistente retorna 404; operação existente sem eventos retorna `[]`.
+
+A migration V3 é aplicada pelo Flyway na inicialização habitual. Os eventos são
+somente acrescentados durante o fluxo normal e compartilham a transação da
+alteração local correspondente. Repetições idempotentes não geram novos eventos.
+`TENTATIVA_ENVIO_CENTRAL` é gravado após a tentativa HTTP: não comprova recebimento
+e pode faltar se o processo for interrompido durante a comunicação ou antes do
+commit. Falha local após sucesso da Central resulta em `ENVIO_INDETERMINADO` se
+for possível persistir a recuperação. Não há reconstrução de histórico anterior
+à migration. Detalhes e limites: [ADR-0008](docs/adr/0008-auditoria-operacoes.md).

@@ -9,6 +9,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(RecursoNaoEncontradoException.class)
+    public ProblemDetail tratarNaoEncontrado(RecursoNaoEncontradoException excecao) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, excecao.getMessage());
+    }
+
     @ExceptionHandler(ConflitoException.class)
     public ProblemDetail tratarConflito(ConflitoException excecao) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, excecao.getMessage());

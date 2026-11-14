@@ -159,3 +159,35 @@ edição são documentais e não substituem testes das aplicações.
   os testes existentes de criação, client, persistência e autorizações. Flyway e
   Hibernate executaram no PostgreSQL local. Arquivos de status do compilador em
   `backend/target` foram atualizados pelo Maven. `git diff --check` passou.
+
+## Auditoria de operações — 14/11/2026
+
+- Ferramenta: Codex. Escopo autorizado: auditoria persistente e endpoint de
+  histórico do backend, migration, testes e documentação. Central e frontend
+  não foram alterados; sem polling, sincronização ou retry automático.
+- Aprovação humana: modelo, tipos, transações e consulta apresentados antes de
+  editar arquivos e aprovados. Orientações adicionais: tentativa registrada após
+  HTTP, distinguir falha local de comunicação, atomicidade, idempotência e
+  trilha append-only. Revisão humana final ainda não registrada.
+- Implementação: EventoOperacao imutável no Hibernate, repository restrito,
+  DTO de resposta, enum, migration V3 com FK/constraints/índice; consulta local
+  cronológica com desempate por UUID e 404 via ProblemDetail.
+- Estado e eventos compartilham transações. Falha local após sucesso da Central
+  tenta gravar ENVIO_INDETERMINADO em nova transação, com descrição específica;
+  falhas dessa recuperação não substituem o último estado confirmado.
+- Testes de criação ampliados para verificar eventos antes/depois da chamada,
+  sucesso, falhas, idempotência inclusive concorrente, HTTP de histórico, 404,
+  histórico vazio e desempate. Testes de rollback usam persistência e flush
+  reais antes da exceção simulada, incluindo falha da recuperação. Teste de
+  listagem adaptado apenas à nova dependência do construtor do service.
+- Limites registrados no README e ADR-0008: interrupções antes do commit podem
+  deixar histórico incompleto; não há atomicidade distribuída ou backfill;
+  imutabilidade no fluxo normal não impede SQL administrativo.
+- A primeira execução no sandbox falhou antes dos testes por acesso aos locks
+  do cache Maven. Execuções com permissão ampliada acessaram cache e PostgreSQL.
+- Validação final: `cd backend && ./mvnw -o -q test` terminou com código 0:
+  47 testes, zero falhas, erros ou ignorados. Migration V3 e validação Hibernate
+  executadas no PostgreSQL local; cenários novos usam schema temporário removido
+  ao final. `git diff --check` passou. Os quatro arquivos rastreados de status do
+  compilador em `backend/target` já tinham alterações e foram atualizados pelo
+  Maven; demais alterações preexistentes foram preservadas.

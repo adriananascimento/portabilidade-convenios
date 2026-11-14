@@ -4,6 +4,7 @@ import br.com.portabilidade.convenios.client.CentralConveniosClient;
 import br.com.portabilidade.convenios.controller.OperacaoController;
 import br.com.portabilidade.convenios.entity.*;
 import br.com.portabilidade.convenios.repository.OperacaoPortabilidadeRepository;
+import br.com.portabilidade.convenios.repository.EventoOperacaoRepository;
 import br.com.portabilidade.convenios.service.OperacaoService;
 import jakarta.persistence.EntityManager;
 import java.util.Set;
@@ -39,6 +40,7 @@ class OperacaoListagemTest {
 
     @Autowired private OperacaoPortabilidadeRepository repository;
     @Autowired private EntityManager entityManager;
+    @Autowired private EventoOperacaoRepository eventos;
     @Autowired private DataSource dataSource;
     @Autowired private PlatformTransactionManager transactionManager;
     private CentralConveniosClient central;
@@ -48,7 +50,7 @@ class OperacaoListagemTest {
     @BeforeEach
     void preparar() {
         central = mock(CentralConveniosClient.class);
-        service = new OperacaoService(central, repository, transactionManager);
+        service = new OperacaoService(central, repository, transactionManager, eventos);
         mvc = MockMvcBuilders.standaloneSetup(new OperacaoController(service)).build();
     }
 

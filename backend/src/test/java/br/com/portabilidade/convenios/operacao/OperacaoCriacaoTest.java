@@ -6,6 +6,7 @@ import br.com.portabilidade.convenios.dto.*;
 import br.com.portabilidade.convenios.entity.*;
 import br.com.portabilidade.convenios.exception.*;
 import br.com.portabilidade.convenios.repository.OperacaoPortabilidadeRepository;
+import br.com.portabilidade.convenios.repository.EventoOperacaoRepository;
 import br.com.portabilidade.convenios.service.OperacaoService;
 import java.net.SocketTimeoutException;
 import java.time.OffsetDateTime;
@@ -48,11 +49,13 @@ class OperacaoCriacaoTest {
     @jakarta.persistence.PersistenceContext jakarta.persistence.EntityManager entityManager;
     @MockitoSpyBean OperacaoPortabilidadeRepository operacoes;
     @MockitoBean CentralConveniosClient central;
+    @MockitoSpyBean EventoOperacaoRepository eventos;
     MockMvc mvc;
     final OffsetDateTime dataCentral = OffsetDateTime.parse("2026-11-14T12:00:00Z");
     final UUID protocolo = UUID.randomUUID();
 
     @BeforeEach void preparar() {
+        new JdbcTemplate(dataSource).execute("DELETE FROM " + SCHEMA + ".eventos_operacao");
         operacoes.deleteAll();
         mvc = MockMvcBuilders.standaloneSetup(new OperacaoController(service))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
@@ -73,6 +76,9 @@ class OperacaoCriacaoTest {
         when(central.criarOperacao(any(), any())).thenAnswer(invocacao -> {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
             assertThat(statusLocal(invocacao.getArgument(1))).isEqualTo(StatusIntegracao.PENDENTE_ENVIO);
+            assertThat(service.consultarEventos(operacoes.findByChaveIdempotencia(invocacao.getArgument(1))
+                    .orElseThrow().getId())).extracting(EventoOperacaoRespostaDTO::tipo)
+                    .containsExactly(TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE);
             return ResponseEntity.accepted().body(resposta(status));
         });
     }
@@ -88,6 +94,9 @@ class OperacaoCriacaoTest {
         assertThat(repetida).isEqualTo(primeira);
         assertThat(repetida.getBody()).isEqualTo(resposta(oficial));
         assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.ENVIADA);
+        assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::tipo).containsExactly(
+                TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE, TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL,
+                TipoEventoOperacao.PROTOCOLO_RECEBIDO);
         verify(central, times(1)).criarOperacao(any(), eq(chave));
     }
 
@@ -158,6 +167,10 @@ class OperacaoCriacaoTest {
         assertThat(statusLocal(chave)).isEqualTo(esperado);
         assertThatThrownBy(() -> service.criarOperacao(request("BEN-1"), chave)).isInstanceOf(CentralIndisponivelException.class);
         assertThat(operacoes.count()).isEqualTo(1);
+        assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::tipo).containsExactly(
+                TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE, TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL,
+                esperado == StatusIntegracao.FALHA_ENVIO ? TipoEventoOperacao.FALHA_INTEGRACAO
+                        : TipoEventoOperacao.RESULTADO_INDETERMINADO);
         verify(central, times(1)).criarOperacao(any(), eq(chave));
     }
 
@@ -202,8 +215,105 @@ class OperacaoCriacaoTest {
         }
         assertThat(operacoes.count()).isEqualTo(1);
         assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.ENVIADA);
+        assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::tipo).containsExactly(
+                TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE, TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL,
+                TipoEventoOperacao.PROTOCOLO_RECEBIDO);
         verify(central, times(1)).criarOperacao(any(), eq(chave));
     }
+    List<EventoOperacaoRespostaDTO> historico(UUID chave) {
+        return service.consultarEventos(operacoes.findByChaveIdempotencia(chave).orElseThrow().getId());
+    }
+
+    @Test void deveConsultarHistoricoPeloIdLocalEOrdenarEmpates() throws Exception {
+        sucesso(StatusOperacao.CONFIRMADA);
+        UUID chave = UUID.randomUUID();
+        service.criarOperacao(request("BEN-1"), chave);
+        UUID id = operacoes.findByChaveIdempotencia(chave).orElseThrow().getId();
+        var protocoloRecebido = historico(chave).get(2);
+        assertThat(protocoloRecebido.statusIntegracaoAnterior()).isEqualTo(StatusIntegracao.PENDENTE_ENVIO);
+        assertThat(protocoloRecebido.statusIntegracaoNovo()).isEqualTo(StatusIntegracao.ENVIADA);
+        assertThat(protocoloRecebido.statusOperacaoNovo()).isEqualTo(StatusOperacao.CONFIRMADA);
+        assertThat(protocoloRecebido.protocoloCentral()).isEqualTo(protocolo);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                "/api/operacoes/{id}/eventos", id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].tipo").value("OPERACAO_CRIADA_LOCALMENTE"))
+                .andExpect(jsonPath("$[2].protocoloCentral").value(protocolo.toString()))
+                .andExpect(jsonPath("$[0].operacao").doesNotExist());
+        new JdbcTemplate(dataSource).update("UPDATE " + SCHEMA
+                + ".eventos_operacao SET data_criacao = '2026-01-01T00:00:00Z' WHERE operacao_id = ?", id);
+        var esperados = new JdbcTemplate(dataSource).queryForList("SELECT id FROM " + SCHEMA
+                + ".eventos_operacao WHERE operacao_id = ? ORDER BY id", UUID.class, id);
+        assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::id).containsExactlyElementsOf(esperados);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                "/api/operacoes/{id}/eventos", UUID.randomUUID())).andExpect(status().isNotFound());
+    }
+
+    @Test void deveConsultarOperacaoPreexistenteSemInventarEventos() throws Exception {
+        var operacao = operacoes.saveAndFlush(new OperacaoPortabilidade(UUID.randomUUID(), "BEN-1",
+                Set.of("PAR-1"), new ContaDestino("001", "1", "1")));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                "/api/operacoes/{id}/eventos", operacao.getId())).andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+    }
+
+    @Test void deveReverterCriacaoQuandoEventoNaoPodeSerPersistido() {
+        doThrow(new IllegalStateException("Falha local simulada")).when(eventos).save(any());
+        assertThatThrownBy(() -> service.criarOperacao(request("BEN-1"), UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(operacoes.count()).isZero();
+        verifyNoInteractions(central);
+    }
+
+    @Test void deveRegistrarIndeterminadoSePersistenciaDoProtocoloFalhar() {
+        sucesso(StatusOperacao.PENDENTE);
+        falharEvento(TipoEventoOperacao.PROTOCOLO_RECEBIDO);
+        UUID chave = UUID.randomUUID();
+        assertThatThrownBy(() -> service.criarOperacao(request("BEN-1"), chave))
+                .isInstanceOf(CentralIndisponivelException.class);
+        var operacao = operacoes.findByChaveIdempotencia(chave).orElseThrow();
+        assertThat(operacao.getStatusIntegracao()).isEqualTo(StatusIntegracao.ENVIO_INDETERMINADO);
+        assertThat(operacao.getProtocoloCentral()).isNull();
+        assertThat(operacao.getStatusOperacao()).isNull();
+        assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::tipo).containsExactly(
+                TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE, TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL,
+                TipoEventoOperacao.RESULTADO_INDETERMINADO);
+        assertThat(historico(chave).get(2).descricao()).contains("persistência local");
+    }
+
+    @Test void deveReverterEstadoETentativaQuandoEventoDeFalhaNaoPersiste() {
+        when(central.criarOperacao(any(), any())).thenThrow(new HttpClientErrorException(HttpStatus.BAD_REQUEST));
+        falharEvento(TipoEventoOperacao.FALHA_INTEGRACAO);
+        UUID chave = UUID.randomUUID();
+        assertThatThrownBy(() -> service.criarOperacao(request("BEN-1"), chave))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.PENDENTE_ENVIO);
+        assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::tipo)
+                .containsExactly(TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE);
+    }
+
+    @Test void devePreservarUltimoEstadoConfirmadoSeRecuperacaoTambemFalhar() {
+        sucesso(StatusOperacao.PENDENTE);
+        falharEvento(TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL);
+        UUID chave = UUID.randomUUID();
+        var erro = catchThrowable(() -> service.criarOperacao(request("BEN-1"), chave));
+        assertThat(erro).isInstanceOf(CentralIndisponivelException.class);
+        assertThat(erro.getCause().getSuppressed()).hasSize(1);
+        assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.PENDENTE_ENVIO);
+        assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::tipo)
+                .containsExactly(TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE);
+        verify(central, times(1)).criarOperacao(any(), eq(chave));
+    }
+
+    void falharEvento(TipoEventoOperacao tipo) {
+        doAnswer(invocacao -> {
+            EventoOperacao evento = invocacao.getArgument(0);
+            entityManager.persist(evento);
+            entityManager.flush();
+            if (evento.getTipo() == tipo) throw new IllegalStateException("Falha local simulada");
+            return evento;
+        }).when(eventos).save(any());
+    }
+
     Object executar(CriarOperacaoRequestDTO request, UUID chave) {
         try { return service.criarOperacao(request, chave); }
         catch (RuntimeException excecao) { return excecao; }

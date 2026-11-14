@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/operacoes")
@@ -28,6 +29,11 @@ public class OperacaoController {
             throw new RequisicaoInvalidaException("Página deve ser não negativa e tamanho deve estar entre 1 e 100.");
         }
         return service.listar(pagina, tamanho);
+    }
+
+    @GetMapping("/{id}/eventos")
+    public List<EventoOperacaoRespostaDTO> consultarEventos(@PathVariable UUID id) {
+        return service.consultarEventos(id);
     }
 
     @PostMapping

@@ -5,8 +5,10 @@ import br.com.portabilidade.convenios.dto.*;
 import br.com.portabilidade.convenios.entity.*;
 import br.com.portabilidade.convenios.exception.*;
 import br.com.portabilidade.convenios.repository.OperacaoPortabilidadeRepository;
+import br.com.portabilidade.convenios.repository.EventoOperacaoRepository;
 import java.util.HashSet;
 import java.util.UUID;
+import java.util.List;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -24,13 +26,22 @@ public class OperacaoService {
     private final CentralConveniosClient centralClient;
     private final OperacaoPortabilidadeRepository operacoes;
     private final TransactionTemplate transacao;
+    private final EventoOperacaoRepository eventos;
 
     public OperacaoService(CentralConveniosClient centralClient, OperacaoPortabilidadeRepository operacoes,
-                           PlatformTransactionManager transactionManager) {
+                           PlatformTransactionManager transactionManager, EventoOperacaoRepository eventos) {
+        this.eventos = eventos;
         this.centralClient = centralClient;
         this.operacoes = operacoes;
         transacao = new TransactionTemplate(transactionManager);
         transacao.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventoOperacaoRespostaDTO> consultarEventos(UUID id) {
+        if (!operacoes.existsById(id)) throw new RecursoNaoEncontradoException("Operação não encontrada");
+        return eventos.findByOperacaoIdOrderByDataCriacaoAscIdAsc(id).stream()
+                .map(EventoOperacaoRespostaDTO::de).toList();
     }
 
     @Transactional(readOnly = true)
@@ -55,9 +66,14 @@ public class OperacaoService {
         if (existente != null) return recuperar(existente, request);
         OperacaoPortabilidade criada;
         try {
-            criada = transacao.execute(tx -> operacoes.saveAndFlush(new OperacaoPortabilidade(
+            criada = transacao.execute(tx -> {
+                var operacao = operacoes.saveAndFlush(new OperacaoPortabilidade(
                     chave, request.beneficiarioId(), parcelas, new ContaDestino(request.contaDestino().banco(),
-                    request.contaDestino().agencia(), request.contaDestino().conta()))));
+                    request.contaDestino().agencia(), request.contaDestino().conta())));
+                eventos.save(new EventoOperacao(operacao, TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE,
+                        "Operação criada localmente", null, StatusIntegracao.PENDENTE_ENVIO, null, null, null));
+                return operacao;
+            });
         } catch (DataIntegrityViolationException excecao) {
             // execute já concluiu o rollback; buscar abre outra transação.
             existente = buscar(chave);
@@ -74,20 +90,26 @@ public class OperacaoService {
             }
         } catch (CentralIndisponivelException | RestClientException excecao) {
             atualizarFalha(criada.getId(), resultadoConhecido(excecao)
-                    ? StatusIntegracao.FALHA_ENVIO : StatusIntegracao.ENVIO_INDETERMINADO);
+                    ? StatusIntegracao.FALHA_ENVIO : StatusIntegracao.ENVIO_INDETERMINADO, false);
             throw new CentralIndisponivelException(excecao);
         }
         var corpo = resposta.getBody();
         try {
             transacao.executeWithoutResult(tx -> {
                 var operacao = operacoes.findById(criada.getId()).orElseThrow();
+                registrarTentativa(operacao);
+                var evento = new EventoOperacao(operacao, TipoEventoOperacao.PROTOCOLO_RECEBIDO,
+                        "Resposta válida da Central com protocolo recebido", operacao.getStatusIntegracao(),
+                        StatusIntegracao.ENVIADA, operacao.getStatusOperacao(),
+                        corpo.status() == null ? StatusOperacao.PENDENTE : corpo.status(), corpo.protocolo());
                 operacao.setProtocoloCentral(corpo.protocolo());
                 operacao.setDataCriacaoCentral(corpo.dataCriacao());
                 operacao.setStatusOperacao(corpo.status() == null ? StatusOperacao.PENDENTE : corpo.status());
                 operacao.setStatusIntegracao(StatusIntegracao.ENVIADA);
+                eventos.save(evento);
             });
         } catch (RuntimeException excecao) {
-            try { atualizarFalha(criada.getId(), StatusIntegracao.ENVIO_INDETERMINADO); }
+            try { atualizarFalha(criada.getId(), StatusIntegracao.ENVIO_INDETERMINADO, true); }
             catch (RuntimeException falhaPersistencia) { excecao.addSuppressed(falhaPersistencia); }
             throw new CentralIndisponivelException(excecao);
         }
@@ -121,8 +143,26 @@ public class OperacaoService {
                 operacao.getStatusOperacao(), operacao.getDataCriacaoCentral(), operacao.getBeneficiarioId()));
     }
 
-    private void atualizarFalha(UUID id, StatusIntegracao status) {
-        transacao.executeWithoutResult(tx -> operacoes.findById(id).orElseThrow().setStatusIntegracao(status));
+    private void registrarTentativa(OperacaoPortabilidade operacao) {
+        // Persistido somente após a chamada HTTP; não comprova recebimento pela Central.
+        eventos.save(new EventoOperacao(operacao, TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL,
+                "Tentativa de comunicação HTTP com a Central realizada", null, null, null, null, null));
+    }
+
+    private void atualizarFalha(UUID id, StatusIntegracao status, boolean falhaPersistencia) {
+        transacao.executeWithoutResult(tx -> {
+            var operacao = operacoes.findById(id).orElseThrow();
+            registrarTentativa(operacao);
+            var evento = new EventoOperacao(operacao,
+                    status == StatusIntegracao.FALHA_ENVIO ? TipoEventoOperacao.FALHA_INTEGRACAO
+                            : TipoEventoOperacao.RESULTADO_INDETERMINADO,
+                    falhaPersistencia ? "Central retornou sucesso, mas houve falha na persistência local do resultado"
+                            : status == StatusIntegracao.FALHA_ENVIO ? "Falha de comunicação ou recusa da Central"
+                            : "Não foi possível determinar o resultado da solicitação à Central",
+                    operacao.getStatusIntegracao(), status, null, null, null);
+            operacao.setStatusIntegracao(status);
+            eventos.save(evento);
+        });
     }
 
     private boolean resultadoConhecido(Throwable excecao) {
