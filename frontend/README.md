@@ -1,75 +1,40 @@
-# React + TypeScript + Vite
+# Frontend — Portabilidade de Convênios
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interface em React, TypeScript e Vite para a Plataforma de Portabilidade de
+Convênios de Desconto em Folha.
 
-Currently, two official plugins are available:
+## Execução local
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Com Node.js compatível com o Vite instalado, execute neste diretório:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm ci
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Acesse o endereço informado pelo Vite no terminal.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Validação
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm run build
+npm run lint
 ```
+
+O build executa a verificação de TypeScript (`tsc -b`) antes de gerar `dist/`.
+Para servir o resultado localmente, utilize `npm run preview`.
+
+## Layout e navegação
+
+- `/` redireciona para `/autorizacoes`, substituindo a entrada no histórico.
+- `/autorizacoes` apresenta o título e a descrição de Autorizações.
+- `/operacoes` apresenta o título e a descrição de Operações.
+
+O layout compartilhado está em `src/layouts/BaseLayout.tsx` e as páginas em
+`src/pages/`. O React Router controla a navegação e a indicação da opção ativa.
+No celular, o menu fica acima do conteúdo com as duas opções sempre acessíveis.
+A interface utiliza CSS próprio, sem biblioteca visual ou fontes externas.
+
+As páginas ainda não possuem formulários, integrações HTTP ou regras de negócio.
+Em hospedagem estática, configure o servidor para servir `index.html` ao acessar
+as rotas da aplicação diretamente (fallback de SPA).
