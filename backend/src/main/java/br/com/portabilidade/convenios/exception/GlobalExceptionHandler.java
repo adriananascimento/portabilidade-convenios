@@ -18,4 +18,11 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problema);
     }
+
+    @ExceptionHandler(RequisicaoInvalidaException.class)
+    public ProblemDetail handleRequisicaoInvalida(RequisicaoInvalidaException ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problema.setTitle(HttpStatus.BAD_REQUEST.getReasonPhrase());
+        return problema;
+    }
 }

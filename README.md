@@ -236,3 +236,60 @@ Além do contrato HTTP, os testes cobrem atraso mínimo, confirmação, rejeiç�
 liberação e nova tentativa com histórico, agenda, idempotência finalizada,
 concorrência do POST e do processador, rollback com falha real no commit e
 migração incremental com vínculos prévios e restrições de integridade.
+
+## Listagem de autorizações
+
+Com a Central (8081) e o backend (8080) em execução, inicie o frontend:
+
+```sh
+cd frontend
+npm install
+npm run dev
+```
+
+Acesse `/autorizacoes` no endereço exibido pelo Vite. O proxy `/api` encaminha
+as chamadas ao backend. A página exibe dez registros por vez; use Anterior e
+Próxima no DataGrid Community para navegar ou Nova autorização para cadastrar pelo Dialog MUI. Após salvar,
+o modal fecha e a primeira página é atualizada. Cancelar e Esc ficam bloqueados
+durante o envio.
+
+```sh
+curl 'http://localhost:8081/autorizacoes?pagina=0&tamanho=10'
+curl 'http://localhost:8080/api/autorizacoes?pagina=0&tamanho=10'
+```
+
+Os dois endpoints GET usam o mesmo contrato (exemplo com um registro):
+
+```json
+{
+  "conteudo": [{
+    "autorizacaoId": "550e8400-e29b-41d4-a716-446655440000",
+    "beneficiarioId": "BEN-001",
+    "convenioId": "CONV-001",
+    "dataAutorizacao": "2026-11-13T12:00:00Z",
+    "status": "ATIVA"
+  }],
+  "pagina": 0,
+  "tamanho": 10,
+  "totalElementos": 1,
+  "totalPaginas": 1
+}
+```
+
+`pagina` começa em zero (padrão 0); `tamanho` aceita 1 a 100 (padrão 10).
+Valores inválidos retornam 400. Sem resultados, `conteudo` é uma lista vazia;
+sem registros, os totais são zero. Página além do total também retorna lista vazia.
+A ordenação é fixa por data decrescente e UUID decrescente para desempate.
+A Central aplica paginação no PostgreSQL; DTOs explícitos mantêm o contrato
+independente da serialização interna de `Page`. O backend lê apenas o corpo
+esperado, sem propagar headers da Central. Falhas HTTP, de conexão ou de leitura
+da listagem retornam 503 com ProblemDetail sanitizado.
+
+Validação da listagem:
+
+```sh
+(cd central-convenios && ./mvnw -Dtest=AutorizacaoListagemIntegracaoTest test)
+(cd backend && ./mvnw -Dtest=AutorizacaoIntegracaoTest test)
+npm run build --prefix frontend
+npm run lint --prefix frontend
+```

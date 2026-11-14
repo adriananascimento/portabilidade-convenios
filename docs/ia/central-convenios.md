@@ -399,3 +399,23 @@ O registro não individualiza trechos gerados por IA e trechos escritos por uma 
 A remoção do status base em V8 explica a diferença entre o estado atual e as
 referências históricas a `DISPONIVEL` nos registros anteriores. Elas foram
 preservadas para manter o contexto, sem alterar os ADRs.
+
+## Listagem paginada de autorizações — 13/11/2026
+
+- Tarefa: implementar GET /autorizacoes paginado, mantendo o POST existente.
+- Trabalho do Codex: inspeção dos padrões; adição de AutorizacoesPaginaDTO,
+  método de consulta no service e endpoint no controller; reutilização de
+  JpaRepository.findAll(Pageable), sem alteração do repository.
+- Decisões: paginação no banco, tamanho de 1 a 100 (padrão 10), página a partir
+  de zero; data e UUID decrescentes; transação somente leitura e DTO explícito.
+  A entidade não tem associações carregadas pela listagem, evitando N+1.
+- Testes adicionados: AutorizacaoListagemIntegracaoTest, com HTTP e PostgreSQL
+  Testcontainers; cobre ordem, desempate, páginas distintas, metadados, campos
+  de resposta, padrões, página vazia e parâmetros inválidos.
+- Validação: ./mvnw test — 43 testes, zero falhas/erros/ignorados, BUILD SUCCESS.
+- Orientações: escopo limitado às autorizações, português, camadas existentes,
+  sem bibliotecas novas e sem alterar operações de portabilidade. Alterações locais
+  preexistentes foram preservadas. README atualizado com uso e contrato JSON.
+- Execução: primeira tentativa Maven foi bloqueada pelo sandbox no cache .m2;
+  repetição com permissão de execução ampliada concluiu os testes. Maven emitiu
+  avisos HTTP 401 para metadados de repositórios externos, sem impedir o build.

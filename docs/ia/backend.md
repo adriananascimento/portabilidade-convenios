@@ -38,12 +38,28 @@ Nenhum teste da aplicação foi executado nesta reorganização documental.
 
 ## Limitações
 
-As atividades estão classificadas como pertencentes ao backend, mas a participação
-de IA, o desenvolvimento humano e a revisão humana permanecem sem comprovação.
-
 A reorganização atual foi realizada com auxílio do Codex: leitura do registro
 anterior e do histórico Git, separação dos três documentos e atualização dos links
 no README e da referência no AGENTS.md. Trata-se de documentação transversal,
 sem implementação de backend, Central ou frontend. O usuário definiu o escopo;
 não há revisão humana final documentada até esta edição. As verificações desta
 edição são documentais e não substituem testes das aplicações.
+
+## Listagem paginada de autorizações — 13/11/2026
+
+- Tarefa: GET /api/autorizacoes integrado à Central pelo client existente.
+- Trabalho do Codex: endpoint, delegação no service, chamada RestClient e
+  AutorizacoesPaginaDTO; parâmetros e metadados preservados; sem repasse dos
+  headers remotos. O contrato do POST foi preservado.
+- Tratamento: falhas HTTP, conexão, leitura e corpo ausente na listagem usam
+  CentralIndisponivelException e o handler 503 existente, sem expor corpo remoto.
+- Testes adicionados: AutorizacaoIntegracaoTest usa MockMvc no controller e
+  RestClient real contra servidor HTTP local; cobre parâmetros, metadados,
+  ausência de header interno, falha HTTP, conexão recusada e validação local.
+- Validação: ./mvnw test — 5 testes, zero falhas/erros/ignorados, BUILD SUCCESS.
+- Orientações: escopo limitado às autorizações, português, camadas existentes,
+  sem bibliotecas novas e sem alterar operações de portabilidade. Alterações locais
+  preexistentes foram preservadas. README atualizado com uso e contrato JSON.
+- Execução: primeira tentativa Maven foi bloqueada pelo sandbox no cache .m2;
+  repetição com permissão de execução ampliada concluiu os testes. Maven emitiu
+  avisos HTTP 401 para metadados de repositórios externos, sem impedir o build.

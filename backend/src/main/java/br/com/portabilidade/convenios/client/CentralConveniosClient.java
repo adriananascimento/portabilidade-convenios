@@ -2,6 +2,7 @@ package br.com.portabilidade.convenios.client;
 
 import br.com.portabilidade.convenios.dto.AgendaRespostaDTO;
 import br.com.portabilidade.convenios.dto.AutorizacaoRespostaDTO;
+import br.com.portabilidade.convenios.dto.AutorizacoesPaginaDTO;
 import br.com.portabilidade.convenios.dto.CriarAutorizacaoRequestDTO;
 import br.com.portabilidade.convenios.exception.CentralIndisponivelException;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 @Component
 public class CentralConveniosClient {
@@ -17,6 +19,21 @@ public class CentralConveniosClient {
 
     public CentralConveniosClient(@Qualifier("centralRestClient") RestClient centralRestClient) {
         this.restClient = centralRestClient;
+    }
+
+    public AutorizacoesPaginaDTO listarAutorizacoes(int pagina, int tamanho) {
+        try {
+            var resposta = restClient.get()
+                    .uri(uri -> uri.path("/autorizacoes").queryParam("pagina", pagina)
+                            .queryParam("tamanho", tamanho).build())
+                    .retrieve()
+                    .body(AutorizacoesPaginaDTO.class);
+            if (resposta == null) throw new CentralIndisponivelException(
+                    new IllegalStateException("Resposta vazia da Central"));
+            return resposta;
+        } catch (RestClientException excecao) {
+            throw new CentralIndisponivelException(excecao);
+        }
     }
 
     public AgendaRespostaDTO consultarAgenda(String beneficiarioId) {
