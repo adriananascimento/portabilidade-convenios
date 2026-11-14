@@ -115,3 +115,30 @@ atividades ao frontend apenas para preencher este documento.
   npm run lint --prefix frontend e git diff --check também passaram.
   O build inicial identificou propriedades incompatíveis com MUI 9; corrigidas
   antes do build final. Vite avisou sobre bundle maior que 500 kB.
+
+## Formulário de operações de portabilidade — 14/11/2026
+
+- Solicitação: modal Material UI aberto por Nova operação, consulta de agenda,
+  seleção múltipla e total, conta de destino e criação com idempotência.
+- Ferramenta: Codex para leitura dos DTOs/controladores Java, implementação e
+  validação. Contratos conferidos: AgendaRespostaDTO, ParcelaRespostaDTO,
+  CriarOperacaoRequestDTO, OperacaoRespostaDTO e endpoints correspondentes.
+- Orientações aplicadas: português, reutilização de MUI/tema, HTTP separado,
+  nenhum pacote novo, sem mudanças no backend/Central, polling ou eventos.
+- Resultado: OperacaoForm montado a cada abertura; consulta cancelada ao editar
+  beneficiário ou desmontar, seleção limpa, campos obrigatórios, estados de erro,
+  carregamento e aceite com protocolo/status. Confirmação fecha e atualiza página
+  zero. HTTP 202 não é apresentado como conclusão da portabilidade.
+- Idempotência: crypto.randomUUID no primeiro envio, ref preservada após erros;
+  alterações de dados invalidam a chave e próxima solicitação gera outra.
+  Ref de envio bloqueia duplicidade e fechamento; controles ficam desabilitados.
+  A chave não persiste ao fechar o modal ou recarregar a página.
+- Validações: npm run build --prefix frontend (inclui TypeScript) e
+  npm run lint --prefix frontend passaram. Vite avisou bundle acima de 500 kB.
+  node --test frontend/tests/operacoesApi.test.mjs: seis testes passaram com fetch
+  simulado, cobrindo agenda, URI codificada, sinal, agenda vazia, 404, payload e
+  UUID preservados pelo cliente em reenvio após falha de rede, aceite 202/PENDENTE
+  e erros 400/409/503. Esses testes não exercitam interações do componente.
+- Limitações: GET localhost:8080 falhou por conexão recusada (HTTP 000); sem
+  integração real, inspeção visual ou teste ponta a ponta em navegador.
+  Revisão humana ainda não registrada para esta implementação.

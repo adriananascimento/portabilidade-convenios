@@ -293,3 +293,34 @@ Validação da listagem:
 npm run build --prefix frontend
 npm run lint --prefix frontend
 ```
+
+## Listagem de operações no frontend
+
+Com os mesmos serviços e o Vite em execução, acesse `/operacoes`. A tabela MUI
+Data Grid consulta `GET /api/operacoes?pagina=0&tamanho=10` e permite selecionar
+10, 25, 50 ou 100 registros por página. Mudanças de tamanho retornam à primeira
+página. Há indicação de carregamento, listagem vazia e erro com nova tentativa.
+
+O contrato paginado contém `conteudo`, `pagina`, `tamanho`, `totalElementos` e
+`totalPaginas`. Cada operação contém protocolo, status, beneficiário e data de criação.
+A coluna Ações permanece reservada, sem controles.
+
+Clique em **Nova operação**, informe o beneficiário e use **Consultar parcelas**.
+Selecione as parcelas disponíveis, confira o total e preencha banco, agência e
+conta de destino. **Solicitar portabilidade** envia `POST /api/operacoes` com
+`beneficiarioId`, `parcelasIds` e `contaDestino`, além de `Idempotency-Key` UUID.
+A consulta usa `GET /api/beneficiarios/{beneficiarioId}/agenda`.
+
+Em caso de falha de comunicação, reenviar sem editar mantém a mesma chave, pois
+a Central pode já ter criado a operação. Alterar dados ou abrir uma nova operação
+inicia uma nova tentativa lógica. A chave é mantida somente enquanto o modal
+permanece aberto; fechar ou recarregar a página perde essa referência.
+Após o aceite, o modal mostra protocolo e status. HTTP 202 significa aceite para
+processamento assíncrono. Clique em **Confirmar** para fechar e atualizar a primeira
+página da listagem. Não há polling ou consulta de eventos nesta etapa.
+
+Testes do cliente HTTP, sem dependências adicionais:
+
+```bash
+node --test frontend/tests/operacoesApi.test.mjs
+```

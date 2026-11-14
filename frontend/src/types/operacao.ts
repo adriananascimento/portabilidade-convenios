@@ -14,3 +14,21 @@ export interface OperacoesPagina {
   totalElementos: number
   totalPaginas: number
 }
+
+export interface ParcelaResposta {
+  parcelaId: string
+  convenioId: string
+  valor: number
+  dataDesconto: string
+}
+
+export interface AgendaResposta {
+  beneficiarioId: string
+  parcelas: ParcelaResposta[]
+}
+
+export interface CriarOperacaoRequest {
+  beneficiarioId: string
+  parcelasIds: string[]
+  contaDestino: {banco: string; agencia: string; conta: string}
+}

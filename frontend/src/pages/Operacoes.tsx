@@ -3,6 +3,7 @@ import {Alert, Box, Button, Chip, Stack, Typography} from '@mui/material'
 import {createTheme, ThemeProvider} from '@mui/material/styles'
 import {DataGrid, type GridColDef, type GridPaginationModel} from '@mui/x-data-grid'
 import {ptBR} from '@mui/x-data-grid/locales'
+import {OperacaoForm} from '../components/OperacaoForm'
 import {listarOperacoes} from '../api/operacoesApi'
 import type {OperacaoResposta, OperacoesPagina, StatusOperacao} from '../types/operacao'
 
@@ -36,6 +37,7 @@ const colunas: GridColDef<OperacaoResposta>[] = [
 const identificarOperacao = (operacao: OperacaoResposta) => operacao.protocolo
 
 export function Operacoes() {
+  const [formularioAberto, setFormularioAberto] = useState(false)
   const [paginacao, setPaginacao] = useState<GridPaginationModel>({page: 0, pageSize: 10})
   const [revisao, setRevisao] = useState(0)
   const [dados, setDados] = useState<OperacoesPagina | null>(null)
@@ -73,7 +75,7 @@ export function Operacoes() {
             <h1 id="titulo-operacoes">Operações de Portabilidade</h1>
             <p>Consulte e acompanhe as operações de portabilidade de convênios de desconto em folha.</p>
           </div>
-          <Button variant="contained" disabled sx={{flexShrink: 0}}>Nova operação</Button>
+          <Button variant="contained" onClick={() => setFormularioAberto(true)} sx={{flexShrink: 0}}>Nova operação</Button>
         </Stack>
 
         {erro && <Alert severity="error" sx={{mb: 2}} action={<Button color="inherit" onClick={() => atualizar()}>Tentar novamente</Button>}>{erro}</Alert>}
@@ -99,6 +101,10 @@ export function Operacoes() {
             sx={{'& .MuiDataGrid-columnHeaders': {'--DataGrid-containerBackground': '#f4f7fb'}}}
           />
         </Box>
+        {formularioAberto && <OperacaoForm onCancelar={() => setFormularioAberto(false)} onSucesso={() => {
+          setFormularioAberto(false)
+          atualizar({...paginacao, page: 0})
+        }} />}
       </section>
     </ThemeProvider>
   )
