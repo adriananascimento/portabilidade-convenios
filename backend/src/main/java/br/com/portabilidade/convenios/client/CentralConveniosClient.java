@@ -1,8 +1,11 @@
 package br.com.portabilidade.convenios.client;
 
 import br.com.portabilidade.convenios.dto.AgendaRespostaDTO;
+import br.com.portabilidade.convenios.dto.AutorizacaoRespostaDTO;
+import br.com.portabilidade.convenios.dto.CriarAutorizacaoRequestDTO;
 import br.com.portabilidade.convenios.exception.CentralIndisponivelException;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -22,6 +25,19 @@ public class CentralConveniosClient {
                     .uri("/beneficiarios/{beneficiarioId}/agenda", beneficiarioId)
                     .retrieve()
                     .body(AgendaRespostaDTO.class);
+
+        } catch (ResourceAccessException excecao) {
+            throw new CentralIndisponivelException(excecao);
+        }
+    }
+
+    public ResponseEntity<AutorizacaoRespostaDTO> criarAutorizacao(CriarAutorizacaoRequestDTO request) {
+        try {
+            return restClient.post()
+                    .uri("/autorizacoes")
+                    .body(request)
+                    .retrieve()
+                    .toEntity(AutorizacaoRespostaDTO.class);
 
         } catch (ResourceAccessException excecao) {
             throw new CentralIndisponivelException(excecao);
