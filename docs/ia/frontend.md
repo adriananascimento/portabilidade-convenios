@@ -1,5 +1,29 @@
 # Uso de IA — Frontend
 
+## Operações de Portabilidade — 14/11/2026
+
+- Ferramenta: Codex, para inspeção do contrato Java, implementação e validação.
+- Solicitação: primeira versão de `/operacoes` com MUI Data Grid Community,
+  paginação no servidor e estados de consulta, seguindo Autorizações.
+- Orientações: preservar Autorizações, backend e Central; nenhuma biblioteca
+  adicional, criação, formulário, trilha de eventos ou atualização automática.
+- Contrato conferido em OperacaoController, OperacaoPaginaDTO e
+  OperacaoRespostaDTO: parâmetros `pagina` (zero inicial) e `tamanho` (1–100),
+  envelope com `conteudo` e totais; registros só têm `protocolo` e `status`.
+- Resultado: cliente HTTP e tipos próprios, protocolo como identificador,
+  cancelamento de consultas antigas, tamanhos 10/25/50/100, retorno à página zero
+  ao mudar tamanho, loading, vazio, erro e nova tentativa. Status com Chip;
+  botão Nova operação desabilitado e coluna Ações sem controles.
+- Limitação apresentada ao usuário: beneficiário e data de criação ausentes
+  no DTO. Colunas mantidas com “Não informado” e aviso explícito na tela.
+  Solicitada preferência ao usuário; nenhuma revisão humana concluída registrada.
+- Validações: build (inclui TypeScript) e lint passaram. Script temporário com
+  fetch simulado verificou parâmetros, AbortSignal, leitura do DTO, falhas HTTP
+  400/500/503 e falha de rede. Não equivale a teste com backend real.
+- Integração real: tentativa de GET em localhost:8080 falhou por conexão recusada;
+  serviço não disponível. Sem validação visual ou ponta a ponta em navegador.
+  Vite avisou sobre bundle acima de 500 kB.
+
 ## Ferramentas utilizadas
 
 Não há ferramentas de IA documentadas para o frontend.

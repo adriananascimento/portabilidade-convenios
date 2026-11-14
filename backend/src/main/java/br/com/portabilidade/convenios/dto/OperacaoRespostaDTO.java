@@ -1,5 +1,6 @@
 package br.com.portabilidade.convenios.dto;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 enum StatusOperacao {
@@ -11,5 +12,7 @@ enum StatusOperacao {
 
 public record OperacaoRespostaDTO(
         UUID protocolo,
-        StatusOperacao status
+        StatusOperacao status,
+        OffsetDateTime dataCriacao,
+        String beneficiarioId
 ) {}
