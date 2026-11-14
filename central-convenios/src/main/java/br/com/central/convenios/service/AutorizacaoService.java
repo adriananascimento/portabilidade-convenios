@@ -2,7 +2,7 @@ package br.com.central.convenios.service;
 
 import br.com.central.convenios.dto.AutorizacaoRequisicaoDTO;
 import br.com.central.convenios.dto.AutorizacaoRespostaDTO;
-import br.com.central.convenios.dto.AutorizacoesPaginaDTO;
+import br.com.central.convenios.dto.AutorizacaoPaginaDTO;
 import br.com.central.convenios.entity.Autorizacao;
 import br.com.central.convenios.entity.StatusAutorizacao;
 import br.com.central.convenios.repository.AutorizacaoRepository;
@@ -27,12 +27,12 @@ public class AutorizacaoService {
     }
 
     @Transactional(readOnly = true)
-    public AutorizacoesPaginaDTO listar(int pagina, int tamanho) {
+    public AutorizacaoPaginaDTO listar(int pagina, int tamanho) {
         var resultado = repository.findAll(PageRequest.of(pagina, tamanho,
                 Sort.by(
                         Sort.Order.desc("dataAutorizacao"),
                         Sort.Order.desc("id"))));
-        return new AutorizacoesPaginaDTO(resultado.map(AutorizacaoRespostaDTO::de).getContent(),
+        return new AutorizacaoPaginaDTO(resultado.map(AutorizacaoRespostaDTO::de).getContent(),
                 resultado.getNumber(), resultado.getSize(), resultado.getTotalElements(), resultado.getTotalPages());
     }
 

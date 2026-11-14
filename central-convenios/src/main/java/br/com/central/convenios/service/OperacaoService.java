@@ -13,6 +13,8 @@ import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -46,6 +48,15 @@ public class OperacaoService {
     public OperacaoConsultaRespostaDTO consultar(UUID protocolo) {
         return OperacaoConsultaRespostaDTO.de(operacoes.findById(protocolo)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Protocolo não encontrato!")));
+    }
+
+    @Transactional(readOnly = true)
+    public OperacaoPaginaDTO listar(int pagina, int tamanho) {
+        var resultado = operacoes.findAll(PageRequest.of(pagina, tamanho,
+                Sort.by(
+                        Sort.Order.desc("dataCriacao"))));
+        return new OperacaoPaginaDTO(resultado.map(OperacaoRespostaDTO::de).getContent(),
+                resultado.getNumber(), resultado.getSize(), resultado.getTotalElements(), resultado.getTotalPages());
     }
 
     public OperacaoRespostaDTO registrar(UUID chave, OperacaoRequisicaoDTO requisicao) {

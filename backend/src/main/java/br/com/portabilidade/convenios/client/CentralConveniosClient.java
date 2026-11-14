@@ -1,9 +1,6 @@
 package br.com.portabilidade.convenios.client;
 
-import br.com.portabilidade.convenios.dto.AgendaRespostaDTO;
-import br.com.portabilidade.convenios.dto.AutorizacaoRespostaDTO;
-import br.com.portabilidade.convenios.dto.AutorizacoesPaginaDTO;
-import br.com.portabilidade.convenios.dto.CriarAutorizacaoRequestDTO;
+import br.com.portabilidade.convenios.dto.*;
 import br.com.portabilidade.convenios.exception.CentralIndisponivelException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +8,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+
+import java.util.UUID;
 
 @Component
 public class CentralConveniosClient {
@@ -57,6 +56,35 @@ public class CentralConveniosClient {
                     .toEntity(AutorizacaoRespostaDTO.class);
 
         } catch (ResourceAccessException excecao) {
+            throw new CentralIndisponivelException(excecao);
+        }
+    }
+
+    public ResponseEntity<OperacaoRespostaDTO> criarOperacao(CriarOperacaoRequestDTO request, UUID chaveIdempotencia) {
+        try {
+            return restClient.post()
+                    .uri("/operacoes-portabilidade")
+                    .header("Idempotency-Key", chaveIdempotencia.toString())
+                    .body(request)
+                    .retrieve()
+                    .toEntity(OperacaoRespostaDTO.class);
+
+        } catch (ResourceAccessException excecao) {
+            throw new CentralIndisponivelException(excecao);
+        }
+    }
+
+    public OperacaoPaginaDTO listarOperacoes(int pagina, int tamanho) {
+        try {
+            var resposta = restClient.get()
+                    .uri(uri -> uri.path("/operacoes-portabilidade").queryParam("pagina", pagina)
+                            .queryParam("tamanho", tamanho).build())
+                    .retrieve()
+                    .body(OperacaoPaginaDTO.class);
+            if (resposta == null) throw new CentralIndisponivelException(
+                    new IllegalStateException("Resposta vazia da Central"));
+            return resposta;
+        } catch (RestClientException excecao) {
             throw new CentralIndisponivelException(excecao);
         }
     }

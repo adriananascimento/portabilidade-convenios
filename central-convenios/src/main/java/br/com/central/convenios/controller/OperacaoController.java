@@ -30,4 +30,14 @@ public class OperacaoController {
         }
         return service.registrar(UUID.fromString(chave), requisicao);
     }
+
+    @GetMapping
+    public OperacaoPaginaDTO listar(
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "10") int tamanho) {
+        if (pagina < 0 || tamanho < 1 || tamanho > 100) {
+            throw new RequisicaoInvalidaException("Página deve ser não negativa e tamanho deve estar entre 1 e 100.");
+        }
+        return service.listar(pagina, tamanho);
+    }
 }
