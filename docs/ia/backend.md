@@ -191,3 +191,43 @@ edição são documentais e não substituem testes das aplicações.
   ao final. `git diff --check` passou. Os quatro arquivos rastreados de status do
   compilador em `backend/target` já tinham alterações e foram atualizados pelo
   Maven; demais alterações preexistentes foram preservadas.
+
+## Sincronização manual de status — 14/11/2026
+
+- Ferramenta: Codex. Escopo: somente backend, endpoint manual, integração de
+  consulta, controle otimista, migration, testes e documentação. Sem alteração
+  na Central/frontend, polling, retry automático ou agendamento.
+- Aprovação humana antes da implementação: POST por UUID local, retorno com
+  OperacaoListagemDTO, timeouts do RestClient e @Version. Cuidados adicionais:
+  validar transições reais, preservar estados finais, FALHA_TECNICA consultável,
+  atomicidade e não sobrescrever versões mais recentes. Revisão humana final
+  ainda não registrada.
+- Análise da Central (somente leitura): finalizar/registrarFalha e seleção do
+  processamento permitem saída apenas de PENDENTE, para CONFIRMADA, REJEITADA
+  ou FALHA_TECNICA. Não há saída de FALHA_TECNICA implementada. O backend permite
+  consultá-la, mas rejeita resposta diferente como inconsistente (502).
+- Implementação: serviço/controller de sincronização, DTO remoto, tratamento
+  específico de erros em ProblemDetail, consulta no cliente existente, @Version
+  na operação e migration V4 com ampliação do enum de eventos. Reutilização do
+  DTO local de listagem; nenhum contrato existente foi alterado.
+- Transações curtas antes/depois do HTTP, versão inicial revalidada, flush
+  versionado e evento atômico. Conflito faz nova leitura local, sem nova chamada
+  HTTP: retorna estado final/igual ou 409. Estado igual não altera versão/data.
+- RestClientConfig agora conecta o requestFactory configurado ao builder.
+  Testes verificam configuração de conexão (3s) e leitura (5s), timeout de leitura
+  com servidor HTTP local real, conexão recusada, erros HTTP e JSON/status inválido.
+- Testes com PostgreSQL e schema temporário cobrem transições, histórico único,
+  operações sem protocolo/inexistentes/finalizadas, FALHA_TECNICA, respostas
+  inválidas, falhas, rollback após flush real e concorrência com respostas finais
+  iguais/divergentes. Barreira na inserção dos eventos força a disputa de versão.
+- Tentativas no sandbox falharam antes dos testes por acesso aos locks do cache
+  Maven. Validação repetida com permissão ampliada para cache e PostgreSQL local.
+- Validação final: `cd backend && ./mvnw -o -q test` terminou com código 0:
+  81 testes, zero falhas, erros ou ignorados (34 casos novos). Migration V4 e
+  validação Hibernate executadas em PostgreSQL real; schemas temporários dos
+  testes novos removidos ao final. `git diff --check` passou. Maven atualizou
+  quatro arquivos rastreados de status do compilador em backend/target, que já
+  tinham alterações. Demais alterações preexistentes foram preservadas.
+- Limites: sem versão temporal remota ou garantia de atualização contínua;
+  solicitações concorrentes podem consultar HTTP em paralelo. Timeout real de
+  conexão não foi simulado; a configuração de 3s foi verificada no factory efetivo.

@@ -1,4 +1,10 @@
-import type {AgendaResposta, CriarOperacaoRequest, OperacaoResposta, OperacoesPagina} from '../types/operacao'
+import type {AgendaResposta, CriarOperacaoRequest, OperacaoListagem, OperacaoResposta, OperacoesPagina} from '../types/operacao'
+
+export async function sincronizarStatusOperacao(id: string, signal: AbortSignal): Promise<OperacaoListagem> {
+  const resposta = await fetch(`/api/operacoes/${encodeURIComponent(id)}/sincronizar-status`, {method: 'POST', signal})
+  if (!resposta.ok) throw new Error('Não foi possível sincronizar o status da operação.')
+  return resposta.json()
+}
 
 export async function listarOperacoes(pagina: number, tamanho: number, signal: AbortSignal): Promise<OperacoesPagina> {
   const resposta = await fetch(`/api/operacoes?pagina=${pagina}&tamanho=${tamanho}`, {signal})

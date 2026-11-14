@@ -402,3 +402,24 @@ e pode faltar se o processo for interrompido durante a comunicação ou antes do
 commit. Falha local após sucesso da Central resulta em `ENVIO_INDETERMINADO` se
 for possível persistir a recuperação. Não há reconstrução de histórico anterior
 à migration. Detalhes e limites: [ADR-0008](docs/adr/0008-auditoria-operacoes.md).
+
+### Sincronização manual do status
+
+`POST /api/operacoes/{id}/sincronizar-status`, sem corpo, consulta a Central pelo
+protocolo associado ao UUID local. Retorna 200 com o mesmo formato de um item da
+listagem: `id`, `beneficiarioId`, `dataCriacao`, `statusIntegracao`, `statusOperacao`
+e `protocoloCentral`. CONFIRMADA e REJEITADA são retornadas sem consulta externa.
+FALHA_TECNICA continua consultável; a Central atual não permite sair desse estado.
+
+Uma mudança válida grava status e evento `STATUS_OPERACAO_ATUALIZADO` na mesma
+transação. Status igual não modifica data/versão nem duplica eventos. O controle
+com `@Version` impede sobrescrever alterações concorrentes; não há transação de
+banco durante HTTP. A migration V4 é aplicada automaticamente pelo Flyway.
+
+Erros em ProblemDetail: 404 para operação local inexistente, 409 para ausência de
+protocolo ou conflito concorrente não resolvido, 504 para timeout, 503 para Central
+indisponível, 502 para resposta/transição inválida ou protocolo remoto inexistente,
+e 500 para falha local na persistência da atualização. Falhas preservam o último
+status conhecido e não mudam `statusIntegracao`. Timeouts efetivos do cliente:
+3 segundos para conectar e 5 para ler. Não há polling, retry ou agendamento.
+Detalhes: [ADR-0009](docs/adr/0009-sincronizacao-manual-status.md).

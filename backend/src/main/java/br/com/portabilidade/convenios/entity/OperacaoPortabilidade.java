@@ -11,6 +11,10 @@ import java.util.UUID;
 @Table(name = "operacoes_portabilidade")
 public class OperacaoPortabilidade {
 
+    @Version
+    @Column(nullable = false)
+    private long versao;
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -73,6 +77,8 @@ public class OperacaoPortabilidade {
 
     public OffsetDateTime getDataCriacaoCentral() { return dataCriacaoCentral; }
     public void setDataCriacaoCentral(OffsetDateTime data) { dataCriacaoCentral = data; }
+
+    public long getVersao() { return versao; }
 
     public UUID getId() { return id; }
     public UUID getChaveIdempotencia() { return chaveIdempotencia; }

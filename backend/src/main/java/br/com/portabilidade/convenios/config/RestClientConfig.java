@@ -22,6 +22,6 @@ public class RestClientConfig {
         // Tempo máximo para aguardar a resposta do servidor remoto (em segundos)
         requestFactory.setReadTimeout(Duration.ofSeconds(5));
 
-        return builder.baseUrl(url).build();
+        return builder.baseUrl(url).requestFactory(requestFactory).build();
     }
 }

@@ -128,3 +128,28 @@ A estratégia de polling no frontend foi escolhida por atender aos requisitos fu
 A decisão considera o escopo atual da aplicação, preservando a integração HTTP e a independência da Central de Convênios.
 
 As alternativas avaliadas permanecem documentadas como possibilidades de evolução, caso surjam novos requisitos de escalabilidade, disponibilidade ou atualização em tempo real.
+
+## Implementação no frontend — 14/11/2026
+
+Proposta aprovada pelo usuário, com ajuste explícito: para o polling automático,
+`FALHA_TECNICA` é final, pois a Central não implementa saída desse estado. A
+sincronização automática inclui apenas operações com protocolo e status
+`PENDENTE` ou nulo, somente na página exibida. O backend permanece inalterado,
+inclusive sua permissão para consultar manualmente `FALHA_TECNICA`.
+
+O controlador do frontend usa `setTimeout` recursivo: primeira consulta após
+10 segundos da carga e próximo ciclo 10 segundos depois da conclusão do
+anterior. Requisições sequenciais e deduplicação por ID impedem sobreposição
+na mesma instância. O intervalo é parâmetro do controlador, com padrão 10.000 ms.
+Sem elegíveis, não há temporizador ativo.
+
+Um AbortController identifica cada carga da listagem. Nova carga/paginação ou
+cleanup do componente cancela temporizador e fetch e invalida respostas antigas,
+inclusive quando o transporte entrega uma resposta após o abort. O abort não
+garante cancelamento do processamento remoto. Abas distintas continuam podendo
+consultar a mesma operação; a concorrência do backend segue conforme ADR-0009.
+
+Respostas atualizam linhas por ID sem recarregar a listagem ou alterar metadados.
+Falhas preservam o estado conhecido, não impedem consultas das demais operações
+e geram aviso; o próximo ciclo tenta novamente. Cancelamentos não geram erro na
+interface. Não foram adicionadas dependências nem alterados backend ou Central.

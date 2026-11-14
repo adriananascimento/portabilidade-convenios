@@ -1,10 +1,11 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {Alert, Box, Button, Chip, Stack, Typography} from '@mui/material'
 import {createTheme, ThemeProvider} from '@mui/material/styles'
 import {DataGrid, type GridColDef, type GridPaginationModel} from '@mui/x-data-grid'
 import {ptBR} from '@mui/x-data-grid/locales'
 import {OperacaoForm} from '../components/OperacaoForm'
-import {listarOperacoes} from '../api/operacoesApi'
+import {listarOperacoes, sincronizarStatusOperacao} from '../api/operacoesApi'
+import {atualizarOperacao, iniciarPollingOperacoes} from '../polling/pollingOperacoes'
 import type {OperacaoListagem, OperacoesPagina, StatusIntegracao, StatusOperacao} from '../types/operacao'
 
 const tema = createTheme({
@@ -63,16 +64,32 @@ export function Operacoes() {
   const [dados, setDados] = useState<OperacoesPagina | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [avisoPolling, setAvisoPolling] = useState('')
+  const controleAtual = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const controle = new AbortController()
+    controleAtual.current = controle
     listarOperacoes(paginacao.page, paginacao.pageSize, controle.signal).then(resposta => {
       if (controle.signal.aborted) return
       setDados(resposta)
       setErro('')
       setCarregando(false)
-    }).catch(() => {
+      iniciarPollingOperacoes({
+        operacoes: resposta.conteudo,
+        signal: controle.signal,
+        sincronizar: sincronizarStatusOperacao,
+        aoAtualizar: operacao => setDados(atual => controle.signal.aborted || !atual
+          ? atual : atualizarOperacao(atual, operacao)),
+        aoConcluir: houveFalha => setAvisoPolling(houveFalha
+          ? 'Não foi possível atualizar alguns status. Os dados conhecidos foram mantidos; uma nova tentativa será feita automaticamente.' : ''),
+      })
+    }).catch((falha: unknown) => {
       if (controle.signal.aborted) return
+      if (falha instanceof Error && falha.name === 'AbortError') {
+        setCarregando(false)
+        return
+      }
       setErro('Não foi possível carregar as operações. Tente novamente.')
       setCarregando(false)
     })
@@ -80,8 +97,10 @@ export function Operacoes() {
   }, [paginacao, revisao])
 
   function atualizar(modelo = paginacao) {
+    controleAtual.current?.abort()
     setCarregando(true)
     setErro('')
+    setAvisoPolling('')
     setPaginacao(modelo.pageSize === paginacao.pageSize ? modelo : {...modelo, page: 0})
     setRevisao(valor => valor + 1)
   }
@@ -99,12 +118,13 @@ export function Operacoes() {
         </Stack>
 
         {erro && <Alert severity="error" sx={{mb: 2}} action={<Button color="inherit" onClick={() => atualizar()}>Tentar novamente</Button>}>{erro}</Alert>}
+        {avisoPolling && <Alert severity="warning" sx={{mb: 2}}>{avisoPolling}</Alert>}
 
         <Typography variant="h6" component="h2" color="primary" sx={{mb: 2}}>Operações cadastradas</Typography>
         <Box sx={{height: 620, width: '100%'}}>
           <DataGrid
             aria-label="Operações realizadas"
-            rows={erro ? [] : dados?.conteudo ?? []}
+            rows={dados?.conteudo ?? []}
             columns={colunas}
             getRowId={identificarOperacao}
             loading={carregando}

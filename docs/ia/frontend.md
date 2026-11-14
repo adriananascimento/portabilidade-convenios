@@ -169,3 +169,33 @@ atividades ao frontend apenas para preencher este documento.
   zero falhas. `git diff --check` passou. Vite avisou sobre chunk acima de 500 kB.
 - Limitações: testes HTTP usam fetch simulado; sem teste visual ou ponta a ponta
   em navegador. Revisão humana final ainda não registrada.
+
+## Polling de status das operações — 14/11/2026
+
+- Ferramenta: Codex para análise do React, serviço Java, contrato HTTP e ADRs,
+  implementação do frontend, testes e documentação.
+- Aprovação humana: proposta aprovada antes das alterações. O usuário ajustou
+  a elegibilidade para protocolo presente e status PENDENTE ou nulo; determinou
+  que FALHA_TECNICA encerre apenas o polling automático e que aborts não apareçam
+  como erros. Backend e Central não devem ser alterados.
+- Resultado: cliente POST sem corpo com UUID local e AbortSignal; controlador
+  com setTimeout recursivo de 10 segundos, consultas sequenciais e IDs únicos.
+  A tela inicia acompanhamento após a carga da página e cancela na nova carga,
+  troca de página e desmontagem. Respostas antigas são descartadas. Atualizações
+  por ID preservam paginação, totais, ordem e formulário. Falhas preservam dados
+  conhecidos e exibem aviso, com novas tentativas nos ciclos seguintes.
+- Testes: node:test e temporizadores simulados, sem novas dependências, cobrindo
+  contrato HTTP, elegibilidade, exclusão de FALHA_TECNICA, espera, sequência,
+  ausência de sobreposição, IDs duplicados, falhas parciais, recuperação,
+  cancelamento, respostas tardias, troca de contexto e atualização por ID.
+- Validação: build TypeScript/Vite e lint passaram. Build mantém aviso de chunk
+  acima de 500 kB. Resultado final dos testes e git diff --check registrado abaixo.
+- Limitações: testes exercitam cliente HTTP e controlador, sem montar React,
+  validação visual ou integração real com o backend. Múltiplas abas não são
+  coordenadas; abort não garante cancelamento do trabalho remoto.
+- Revisão humana: aprovação do escopo registrada; revisão final da implementação
+  ainda não registrada.
+- Resultado final: `node --test frontend/tests/*.test.mjs` passou com 21 testes,
+  zero falhas; `npm run build --prefix frontend` e
+  `npm run lint --prefix frontend` passaram; `git diff --check` passou.
+  Node emitiu aviso de API experimental para MockTimers.
