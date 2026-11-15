@@ -3,9 +3,9 @@ spring:
     name: portabilidade-convenios
 
   datasource:
-    url: jdbc:postgresql://localhost:5433/portabilidade
-    username: portabilidade
-    password: portabilidade
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/portabilidade}
+    username: ${SPRING_DATASOURCE_USERNAME:portabilidade}
+    password: ${SPRING_DATASOURCE_PASSWORD:portabilidade}
     driver-class-name: org.postgresql.Driver
 
   jpa:

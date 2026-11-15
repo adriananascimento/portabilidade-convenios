@@ -6,7 +6,7 @@ spring:
     name: central-convenios
 
   datasource:
-    url: jdbc:postgresql://localhost:5434/central_convenios
+    url: jdbc:postgresql://localhost:5432/central_convenios
     username: central
     password: central
     driver-class-name: org.postgresql.Driver
