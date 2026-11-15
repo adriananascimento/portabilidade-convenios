@@ -55,6 +55,10 @@ class OperacaoCriacaoTest {
     final UUID protocolo = UUID.randomUUID();
 
     @BeforeEach void preparar() {
+        when(central.criarOperacao(any(), any(), any())).thenAnswer(invocacao -> {
+            try { return central.criarOperacao(invocacao.getArgument(0), invocacao.getArgument(1)); }
+            finally { ((Runnable) invocacao.getArgument(2)).run(); }
+        });
         new JdbcTemplate(dataSource).execute("DELETE FROM " + SCHEMA + ".eventos_operacao");
         operacoes.deleteAll();
         mvc = MockMvcBuilders.standaloneSetup(new OperacaoController(service))
@@ -187,10 +191,10 @@ class OperacaoCriacaoTest {
         when(central.criarOperacao(any(), any())).thenReturn(ResponseEntity.accepted().build());
         verificarFalha(StatusIntegracao.ENVIO_INDETERMINADO);
     }
-    @Test void deveTratarConexaoRecusadaComoFalhaConhecida() {
+    @Test void deveTratarConexaoRecusadaComoIndeterminado() {
         when(central.criarOperacao(any(), any())).thenThrow(new CentralIndisponivelException(
                 new ResourceAccessException("conexão recusada", new java.net.ConnectException())));
-        verificarFalha(StatusIntegracao.FALHA_ENVIO);
+        verificarFalha(StatusIntegracao.ENVIO_INDETERMINADO);
     }
     void verificarFalha(StatusIntegracao esperado) {
         UUID chave = UUID.randomUUID();
@@ -311,7 +315,7 @@ class OperacaoCriacaoTest {
         assertThat(historico(chave).get(2).descricao()).contains("persistência local");
     }
 
-    @Test void deveReverterEstadoETentativaQuandoEventoDeFalhaNaoPersiste() {
+    @Test void devePreservarTentativaQuandoEventoDeFalhaNaoPersiste() {
         when(central.criarOperacao(any(), any())).thenThrow(new HttpClientErrorException(HttpStatus.BAD_REQUEST));
         falharEvento(TipoEventoOperacao.FALHA_INTEGRACAO);
         UUID chave = UUID.randomUUID();
@@ -319,20 +323,88 @@ class OperacaoCriacaoTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.PENDENTE_ENVIO);
         assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::tipo)
-                .containsExactly(TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE);
+                .containsExactly(TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE, TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL);
     }
 
-    @Test void devePreservarUltimoEstadoConfirmadoSeRecuperacaoTambemFalhar() {
+    @Test void deveMarcarIndeterminadoQuandoAuditoriaDaTentativaFalhar() {
         sucesso(StatusOperacao.PENDENTE);
         falharEvento(TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL);
         UUID chave = UUID.randomUUID();
         var erro = catchThrowable(() -> service.criarOperacao(request("BEN-1"), chave));
         assertThat(erro).isInstanceOf(CentralIndisponivelException.class);
-        assertThat(erro.getCause().getSuppressed()).hasSize(1);
-        assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.PENDENTE_ENVIO);
+
+        assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.ENVIO_INDETERMINADO);
         assertThat(historico(chave)).extracting(EventoOperacaoRespostaDTO::tipo)
-                .containsExactly(TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE);
+                .containsExactly(TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE, TipoEventoOperacao.RESULTADO_INDETERMINADO);
         verify(central, times(1)).criarOperacao(any(), eq(chave));
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"503-sucesso", "timeout-sucesso", "503-falha", "502-falha", "504-falha", "conexao-falha", "401", "409", "interrupcao"})
+    void deveExecutarRetryRealComAuditoriaIndependente(String cenario) throws Exception {
+        var builder = org.springframework.web.client.RestClient.builder();
+        var servidor = org.springframework.test.web.client.MockRestServiceServer.bindTo(builder).build();
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build();
+        var esperas = new java.util.ArrayList<Long>();
+        var client = new CentralConveniosClient(builder.build(), mapper, "chave-teste") {
+            @Override protected void aguardarBackoff(long milissegundos) throws InterruptedException {
+                assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+                esperas.add(milissegundos);
+                if (cenario.equals("interrupcao")) throw new InterruptedException("teste");
+            }
+        };
+        UUID chave = UUID.randomUUID();
+        String json = mapper.writeValueAsString(request("BEN-1"));
+        String assinatura = br.com.portabilidade.convenios.seguranca.AssinaturaHmac.assinar(json, "chave-teste");
+        int quantidade = cenario.endsWith("-falha") || cenario.equals("503-sucesso") ? 3
+                : cenario.equals("timeout-sucesso") ? 2 : 1;
+        for (int indice = 0; indice < quantidade; indice++) {
+            int enviosAnteriores = indice;
+            var expectativa = servidor.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.anything())
+                    .andExpect(requisicao -> {
+                        assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+                        assertThat(operacoes.count()).isEqualTo(1);
+                        assertThat(historico(chave).stream().filter(evento -> evento.tipo()
+                                == TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL).count()).isEqualTo(enviosAnteriores);
+                    })
+                    .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.header("Idempotency-Key", chave.toString()))
+                    .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.header("X-Assinatura-HMAC", assinatura))
+                    .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.content().string(json));
+            if (cenario.endsWith("sucesso") && indice == quantidade - 1) {
+                expectativa.andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(HttpStatus.ACCEPTED)
+                        .contentType(MediaType.APPLICATION_JSON).body(mapper.writeValueAsString(resposta(StatusOperacao.PENDENTE))));
+            } else if (cenario.equals("conexao-falha")) {
+                expectativa.andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withException(new java.net.ConnectException()));
+            } else if (cenario.startsWith("timeout")) {
+                expectativa.andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withException(new SocketTimeoutException()));
+            } else {
+                expectativa.andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(
+                        cenario.equals("401") ? HttpStatus.UNAUTHORIZED : cenario.equals("409") ? HttpStatus.CONFLICT
+                                : cenario.startsWith("502") ? HttpStatus.BAD_GATEWAY
+                                : cenario.startsWith("504") ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.SERVICE_UNAVAILABLE));
+            }
+        }
+        doAnswer(invocacao -> client.criarOperacao(
+                invocacao.getArgument(0), invocacao.getArgument(1), invocacao.getArgument(2)))
+                .when(central).criarOperacao(any(), any(), any());
+        try {
+            if (cenario.endsWith("sucesso")) {
+                assertThat(service.criarOperacao(request("BEN-1"), chave).getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+                assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.ENVIADA);
+            } else {
+                assertThatThrownBy(() -> service.criarOperacao(request("BEN-1"), chave))
+                        .isInstanceOf(cenario.equals("401") ? AutenticacaoCentralException.class : CentralIndisponivelException.class);
+                assertThat(statusLocal(chave)).isEqualTo(cenario.equals("401") || cenario.equals("409")
+                        ? StatusIntegracao.FALHA_ENVIO : StatusIntegracao.ENVIO_INDETERMINADO);
+            }
+            assertThat(historico(chave).stream().filter(evento -> evento.tipo() == TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL).count())
+                    .isEqualTo(quantidade);
+            assertThat(operacoes.count()).isEqualTo(1);
+            if (quantidade == 3) assertThat(esperas).containsExactly(1000L, 2000L);
+            if (cenario.equals("timeout-sucesso")) assertThat(esperas).containsExactly(1000L);
+            if (cenario.equals("interrupcao")) assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            servidor.verify();
+        } finally { Thread.interrupted(); }
     }
 
     void falharEvento(TipoEventoOperacao tipo) {

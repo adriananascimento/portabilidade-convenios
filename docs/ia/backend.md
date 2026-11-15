@@ -250,3 +250,23 @@ edição são documentais e não substituem testes das aplicações.
 - Validação: `cd backend && ./mvnw -o -q test`: 87 testes, zero falhas, erros ou ignorados; código de saída 0.
 - Tentativa inicial bloqueada pelos locks do cache Maven no sandbox; execução
   repetida com permissão ampliada. `git diff --check` passou.
+
+## Retry do envio inicial à Central — 14/11/2026
+
+- Ferramenta: Codex. Solicitação: até três envios, backoff 1s/2s, somente falhas
+  transitórias, JSON/HMAC/chave invariáveis, auditoria independente, sem reenvio
+  posterior ou alteração da Central. Analisados cliente, criação, registrarTentativa,
+  atualizarFalha, transações, idempotência e testes existentes.
+- Implementado laço explícito sem nova dependência, callback de auditoria por envio
+  em REQUIRES_NEW e classificação de conexão como indeterminada. A contagem é dada
+  pelos eventos de tentativa existentes. Documentados ADR-0010 e README.
+- Testes exercitam RestClient real com transporte simulado e persistência PostgreSQL,
+  inspecionando JSON, HMAC, chave, intervalos, transações, histórico e operação única.
+  Testes anteriores foram ajustados para o callback independente e conexão indeterminada.
+- Durante validação foram corrigidos declaração de exceção checked e setup Mockito
+  do teste parametrizado. O sandbox inicial impediu locks Maven; execução ampliada
+  permitiu acesso ao cache e ao PostgreSQL local. Revisão humana ainda não registrada.
+- Validação final: `cd backend && ./mvnw -o -q test`: 100 testes,
+  zero falhas, erros ou ignorados; código de saída 0. `git diff --check` passou.
+  A suíte da Central foi executada e suas duas falhas estão registradas em
+  `docs/ia/central-convenios.md`; nenhum código da Central foi alterado.

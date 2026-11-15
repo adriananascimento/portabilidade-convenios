@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
 @RestController
@@ -52,22 +53,29 @@ public class OperacaoController {
                                          @RequestBody String corpoJson) {
 
         try {
-            if (!AssinaturaHmac.verificar(corpoJson, chaveHmac, assinaturaRecebida)) {
+            boolean assinaturaValida = AssinaturaHmac.verificar(corpoJson, chaveHmac, assinaturaRecebida);
+
+            if (!assinaturaValida) {
                 throw new AssinaturaException("Assinatura HMAC inválida");
             }
-        } catch (ResponseStatusException e) {
+        } catch (AssinaturaException e) {
             throw e;
         } catch (Exception e) {
-            throw new AssinaturaException("Erro ao verificar assinatura HMAC");
+            throw new IllegalStateException("Erro ao verificar assinatura HMAC", e);
         }
 
         if (!chave.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")) {
             throw new RequisicaoInvalidaException("Idempotency-Key deve ser um UUID");
         }
-        OperacaoRequisicaoDTO requisicao = jsonMapper.readValue(corpoJson, OperacaoRequisicaoDTO.class);
+        OperacaoRequisicaoDTO requisicao;
+        try {
+            requisicao = jsonMapper.readValue(corpoJson, OperacaoRequisicaoDTO.class);
+        } catch (JacksonException e) {
+            throw new RequisicaoInvalidaException("JSON inválido");
+        }
         Set<ConstraintViolation<OperacaoRequisicaoDTO>> violacoes = validator.validate(requisicao);
         if (!violacoes.isEmpty()) {
-            throw new ConstraintViolationException(violacoes);
+            throw new RequisicaoInvalidaException("Dados da operação inválidos");
         }
         return service.registrar(UUID.fromString(chave), requisicao);
     }

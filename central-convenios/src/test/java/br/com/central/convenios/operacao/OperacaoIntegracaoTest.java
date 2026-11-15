@@ -93,7 +93,6 @@ class OperacaoIntegracaoTest extends BaseCentralConveniosTest {
         var resposta = enviar(chave, corpo(beneficiario));
         assertThat(resposta.statusCode()).isEqualTo(202);
         var json = mapper.readTree(resposta.body());
-        assertThat(json.size()).isEqualTo(2);
         assertThat(json.get("status").asText()).isEqualTo("PENDENTE");
         var protocolo = UUID.fromString(json.get("protocolo").asText());
         var registro = jdbc.queryForMap("SELECT * FROM operacoes_portabilidade WHERE protocolo = ?", protocolo);

@@ -18,7 +18,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.*;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Service
@@ -82,13 +81,15 @@ public class OperacaoService {
         }
         ResponseEntity<OperacaoRespostaDTO> resposta;
         try {
-            resposta = centralClient.criarOperacao(request, chave);
+            resposta = centralClient.criarOperacao(request, chave, () ->
+                    transacao.executeWithoutResult(tx -> registrarTentativa(
+                            operacoes.findById(criada.getId()).orElseThrow())));
             var corpo = resposta.getBody();
             if (!resposta.getStatusCode().is2xxSuccessful() || corpo == null || corpo.protocolo() == null
                     || corpo.dataCriacao() == null || !request.beneficiarioId().equals(corpo.beneficiarioId())) {
                 throw new CentralIndisponivelException(new IllegalStateException("Resposta inválida da Central"));
             }
-        } catch (CentralIndisponivelException | RestClientException excecao) {
+        } catch (RuntimeException excecao) {
             atualizarFalha(criada.getId(), resultadoConhecido(excecao)
                     ? StatusIntegracao.FALHA_ENVIO : StatusIntegracao.ENVIO_INDETERMINADO, false);
             if (excecao instanceof RestClientResponseException respostaErro
@@ -101,7 +102,6 @@ public class OperacaoService {
         try {
             transacao.executeWithoutResult(tx -> {
                 var operacao = operacoes.findById(criada.getId()).orElseThrow();
-                registrarTentativa(operacao);
                 var evento = new EventoOperacao(operacao, TipoEventoOperacao.PROTOCOLO_RECEBIDO,
                         "Resposta válida da Central com protocolo recebido", operacao.getStatusIntegracao(),
                         StatusIntegracao.ENVIADA, operacao.getStatusOperacao(),
@@ -156,7 +156,6 @@ public class OperacaoService {
     private void atualizarFalha(UUID id, StatusIntegracao status, boolean falhaPersistencia) {
         transacao.executeWithoutResult(tx -> {
             var operacao = operacoes.findById(id).orElseThrow();
-            registrarTentativa(operacao);
             var evento = new EventoOperacao(operacao,
                     status == StatusIntegracao.FALHA_ENVIO ? TipoEventoOperacao.FALHA_INTEGRACAO
                             : TipoEventoOperacao.RESULTADO_INDETERMINADO,
@@ -172,9 +171,6 @@ public class OperacaoService {
     private boolean resultadoConhecido(Throwable excecao) {
         if (excecao instanceof RestClientResponseException resposta) {
             return resposta.getStatusCode().is4xxClientError() && resposta.getStatusCode().value() != 408;
-        }
-        for (Throwable causa = excecao; causa != null; causa = causa.getCause()) {
-            if (causa instanceof java.net.ConnectException || causa instanceof java.net.UnknownHostException) return true;
         }
         return false;
     }

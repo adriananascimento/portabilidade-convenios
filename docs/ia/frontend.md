@@ -208,3 +208,9 @@ atividades ao frontend apenas para preencher este documento.
 - Contrato do backend para falha de autenticação entre serviços documentado:
   HTTP 502 com mensagem sanitizada em ProblemDetail.detail.
 - Revisão humana final ainda não registrada.
+
+## Escopo do retry do backend — 14/11/2026
+
+- Codex implementou retry apenas no backend. Nenhuma alteração no frontend ou
+  contrato HTTP foi realizada nesta tarefa. Testes de frontend não executados.
+  Revisão humana ainda não registrada.

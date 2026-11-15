@@ -401,7 +401,7 @@ Operação inexistente retorna 404; operação existente sem eventos retorna `[]
 A migration V3 é aplicada pelo Flyway na inicialização habitual. Os eventos são
 somente acrescentados durante o fluxo normal e compartilham a transação da
 alteração local correspondente. Repetições idempotentes não geram novos eventos.
-`TENTATIVA_ENVIO_CENTRAL` é gravado após a tentativa HTTP: não comprova recebimento
+`TENTATIVA_ENVIO_CENTRAL` é gravado em transação independente após cada tentativa HTTP: não comprova recebimento
 e pode faltar se o processo for interrompido durante a comunicação ou antes do
 commit. Falha local após sucesso da Central resulta em `ENVIO_INDETERMINADO` se
 for possível persistir a recuperação. Não há reconstrução de histórico anterior
@@ -427,3 +427,16 @@ e 500 para falha local na persistência da atualização. Falhas preservam o úl
 status conhecido e não mudam `statusIntegracao`. Timeouts efetivos do cliente:
 3 segundos para conectar e 5 para ler. Não há polling, retry ou agendamento.
 Detalhes: [ADR-0009](docs/adr/0009-sincronizacao-manual-status.md).
+
+
+### Retry no envio inicial à Central
+
+O backend realiza até três envios, com espera de 1s e 2s para HTTP 502/503/504
+ou falhas de conexão/timeout. Cada envio reutiliza chave de idempotência, JSON e
+HMAC. Outros erros HTTP não geram retry; 401 preserva a resposta específica de
+falha de autenticação. 5xx e falhas de transporte sem confirmação resultam em
+`ENVIO_INDETERMINADO`; rejeições 4xx, exceto 408, em `FALHA_ENVIO`.
+Cada envio gera um evento de tentativa em transação curta independente; a contagem
+desses eventos representa os envios realizados. Não há transação durante HTTP ou
+backoff, nem reenvio de operação preexistente. O retry interno da Central permanece
+inalterado. Decisão e limitações: [ADR-0010](docs/adr/0010-retry-envio-inicial-central.md).

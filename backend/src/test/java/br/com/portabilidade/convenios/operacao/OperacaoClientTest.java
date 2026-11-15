@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class OperacaoClientTest {
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(ints = {401, 422, 408, 500})
+    @org.junit.jupiter.params.provider.ValueSource(ints = {400, 401, 403, 404, 409, 422, 408, 500})
     void devePreservarStatusHttpParaClassificacaoNoService(int status) {
         var builder = RestClient.builder();
         var servidor = org.springframework.test.web.client.MockRestServiceServer.bindTo(builder).build();

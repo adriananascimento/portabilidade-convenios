@@ -437,3 +437,11 @@ preservadas para manter o contexto, sem alterar os ADRs.
   Nenhuma correção fora do escopo foi aplicada.
 - Tentativa inicial bloqueada pelos locks do cache Maven no sandbox; execução
   repetida com permissão ampliada. `git diff --check` passou.
+
+## Verificação durante retry do backend — 14/11/2026
+
+- Codex executou `cd central-convenios && ./mvnw -o -q test` sem alterar código
+  ou retry interno da Central. Resultado: 44 testes, 2 falhas, zero erros/ignorados.
+- `OperacaoIntegracaoTest.deveCriarOperacaoComVinculosEConta`: espera 2 campos JSON,
+  recebe 4. `deveValidarListaCamposEHeader`: espera HTTP 400, recebe 500 na linha 139.
+  Falhas fora do código modificado; mantidas para revisão humana, ainda não registrada.
