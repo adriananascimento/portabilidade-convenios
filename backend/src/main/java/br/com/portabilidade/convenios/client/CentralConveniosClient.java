@@ -3,7 +3,10 @@ package br.com.portabilidade.convenios.client;
 import br.com.portabilidade.convenios.dto.*;
 import br.com.portabilidade.convenios.exception.CentralIndisponivelException;
 import br.com.portabilidade.convenios.exception.SincronizacaoException;
+import br.com.portabilidade.convenios.seguranca.AssinaturaHmac;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.UUID;
 
@@ -18,9 +22,17 @@ import java.util.UUID;
 public class CentralConveniosClient {
 
     private final RestClient restClient;
+    private final JsonMapper jsonMapper;
+    private final String chaveHmac;
 
-    public CentralConveniosClient(@Qualifier("centralRestClient") RestClient centralRestClient) {
+    public CentralConveniosClient(
+            @Qualifier("centralRestClient") RestClient centralRestClient,
+            JsonMapper jsonMapper,
+            @Value("${central.integracao.chave-hmac}") String chaveHmac
+    ) {
         this.restClient = centralRestClient;
+        this.jsonMapper = jsonMapper;
+        this.chaveHmac = chaveHmac;
     }
 
     public OperacaoConsultaCentralDTO consultarOperacao(UUID protocolo) {
@@ -99,14 +111,23 @@ public class CentralConveniosClient {
 
     public ResponseEntity<OperacaoRespostaDTO> criarOperacao(CriarOperacaoRequestDTO request, UUID chaveIdempotencia) {
         try {
+            String json = jsonMapper.writeValueAsString(request);
+            String assinatura = AssinaturaHmac.assinar(json, chaveHmac);
+
             return restClient.post()
                     .uri("/operacoes-portabilidade")
                     .header("Idempotency-Key", chaveIdempotencia.toString())
-                    .body(request)
+                    .header("X-Assinatura-HMAC", assinatura)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(json)
                     .retrieve()
                     .toEntity(OperacaoRespostaDTO.class);
 
         } catch (ResourceAccessException excecao) {
+            throw new CentralIndisponivelException(excecao);
+        } catch (RestClientException excecao) {
+            throw excecao;
+        } catch (Exception excecao) {
             throw new CentralIndisponivelException(excecao);
         }
     }

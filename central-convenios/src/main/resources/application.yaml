@@ -25,3 +25,6 @@ central:
     habilitado: true
     intervalo: PT5S
     atraso-minimo: PT10S
+    
+  integracao:
+    chave-hmac: ${CENTRAL_HMAC_SECRET:chave_para_teste}

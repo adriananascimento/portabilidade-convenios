@@ -30,7 +30,7 @@ class OperacaoConsultaClientTest {
         UUID protocolo = UUID.randomUUID();
         servidor.expect(requestTo("/operacoes-portabilidade/" + protocolo)).andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("{\"protocolo\":\"" + protocolo + "\",\"status\":\"CONFIRMADA\"}", MediaType.APPLICATION_JSON));
-        var resposta = new CentralConveniosClient(builder.build()).consultarOperacao(protocolo);
+        var resposta = new CentralConveniosClient(builder.build(), tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build(), "chave-teste").consultarOperacao(protocolo);
         assertThat(resposta.protocolo()).isEqualTo(protocolo);
         assertThat(resposta.status()).isEqualTo(StatusOperacao.CONFIRMADA);
         servidor.verify();
@@ -41,7 +41,7 @@ class OperacaoConsultaClientTest {
         var builder = RestClient.builder();
         var servidor = MockRestServiceServer.bindTo(builder).build();
         servidor.expect(anything()).andRespond(withStatus(HttpStatusCode.valueOf(remoto)));
-        assertThatThrownBy(() -> new CentralConveniosClient(builder.build()).consultarOperacao(UUID.randomUUID()))
+        assertThatThrownBy(() -> new CentralConveniosClient(builder.build(), tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build(), "chave-teste").consultarOperacao(UUID.randomUUID()))
                 .isInstanceOfSatisfying(SincronizacaoException.class, erro -> assertThat(erro.getStatus().value()).isEqualTo(esperado));
         servidor.verify();
     }
@@ -51,7 +51,7 @@ class OperacaoConsultaClientTest {
         var builder = RestClient.builder();
         var servidor = MockRestServiceServer.bindTo(builder).build();
         servidor.expect(anything()).andRespond(withSuccess(corpo, MediaType.APPLICATION_JSON));
-        assertThatThrownBy(() -> new CentralConveniosClient(builder.build()).consultarOperacao(UUID.randomUUID()))
+        assertThatThrownBy(() -> new CentralConveniosClient(builder.build(), tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build(), "chave-teste").consultarOperacao(UUID.randomUUID()))
                 .isInstanceOfSatisfying(SincronizacaoException.class,
                         erro -> assertThat(erro.getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY));
         servidor.verify();
@@ -61,7 +61,7 @@ class OperacaoConsultaClientTest {
         int porta;
         try (var socket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress())) { porta = socket.getLocalPort(); }
         var client = new CentralConveniosClient(new RestClientConfig().centralRestClient(RestClient.builder(),
-                "http://localhost:" + porta));
+                "http://localhost:" + porta), tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build(), "chave-teste");
         assertThatThrownBy(() -> client.consultarOperacao(UUID.randomUUID()))
                 .isInstanceOfSatisfying(SincronizacaoException.class,
                         erro -> assertThat(erro.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
@@ -78,7 +78,7 @@ class OperacaoConsultaClientTest {
         servidor.start();
         try {
             var client = new CentralConveniosClient(new RestClientConfig().centralRestClient(RestClient.builder(),
-                    "http://localhost:" + servidor.getAddress().getPort()));
+                    "http://localhost:" + servidor.getAddress().getPort()), tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build(), "chave-teste");
             long inicio = System.nanoTime();
             assertThatThrownBy(() -> client.consultarOperacao(UUID.randomUUID()))
                     .isInstanceOfSatisfying(SincronizacaoException.class,

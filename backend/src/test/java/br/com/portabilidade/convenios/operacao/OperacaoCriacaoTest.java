@@ -139,6 +139,37 @@ class OperacaoCriacaoTest {
         verify(central, times(1)).criarOperacao(any(), any());
     }
 
+    @Test void deveRegistrar401ComoFalhaERetornar502SemReenviar() throws Exception {
+        when(central.criarOperacao(any(), any())).thenThrow(new HttpClientErrorException(HttpStatus.UNAUTHORIZED));
+        UUID chave = UUID.randomUUID();
+        mvc.perform(post("/api/operacoes").header("Idempotency-Key", chave)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"beneficiarioId":"BEN-1","parcelasIds":["PAR-1","PAR-2"],
+                "contaDestino":{"banco":"001","agencia":"0001","conta":"123"}}
+                """))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.detail").value(
+                        "Falha de autenticação na comunicação com a Central de Convênios."));
+        assertThat(statusLocal(chave)).isEqualTo(StatusIntegracao.FALHA_ENVIO);
+        var historico = historico(chave);
+        assertThat(historico).extracting(EventoOperacaoRespostaDTO::tipo).containsExactly(
+                TipoEventoOperacao.OPERACAO_CRIADA_LOCALMENTE, TipoEventoOperacao.TENTATIVA_ENVIO_CENTRAL,
+                TipoEventoOperacao.FALHA_INTEGRACAO);
+        assertThat(historico.get(2).statusIntegracaoAnterior()).isEqualTo(StatusIntegracao.PENDENTE_ENVIO);
+        assertThat(historico.get(2).statusIntegracaoNovo()).isEqualTo(StatusIntegracao.FALHA_ENVIO);
+        assertThatThrownBy(() -> service.criarOperacao(request("BEN-1"), chave))
+                .isInstanceOf(CentralIndisponivelException.class).hasMessageContaining("FALHA_ENVIO");
+        assertThatThrownBy(() -> service.criarOperacao(request("OUTRO"), chave)).isInstanceOf(ConflitoException.class);
+        assertThat(operacoes.count()).isEqualTo(1);
+        assertThat(historico(chave)).hasSize(3);
+        verify(central, times(1)).criarOperacao(any(), eq(chave));
+    }
+
+    @Test void deveTratar408ComoIndeterminado() {
+        when(central.criarOperacao(any(), any())).thenThrow(new HttpClientErrorException(HttpStatus.REQUEST_TIMEOUT));
+        verificarFalha(StatusIntegracao.ENVIO_INDETERMINADO);
+    }
+
     @Test void devePersistirFalhaConhecidaSemReenviar() {
         when(central.criarOperacao(any(), any())).thenThrow(new HttpClientErrorException(HttpStatus.UNPROCESSABLE_ENTITY));
         verificarFalha(StatusIntegracao.FALHA_ENVIO);

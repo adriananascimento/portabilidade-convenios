@@ -32,6 +32,7 @@ class OperacaoIntegracaoTest extends BaseCentralConveniosTest {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Value("${central.integracao.chave-hmac}") String chaveHmac;
     @Autowired ProcessamentoOperacaoService processamento;
     @LocalServerPort int porta;
     @Autowired JdbcTemplate jdbc;
@@ -60,10 +61,24 @@ class OperacaoIntegracaoTest extends BaseCentralConveniosTest {
 
     private HttpResponse<String> enviar(String chave, String corpo) throws Exception {
         var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + porta + "/operacoes-portabilidade"))
-                .header("Content-Type", "application/json");
+                .header("Content-Type", "application/json")
+                .header("X-Assinatura-HMAC", br.com.central.convenios.seguranca.AssinaturaHmac.assinar(corpo, chaveHmac));
         if (chave != null) builder.header("Idempotency-Key", chave);
         return cliente.send(builder.POST(HttpRequest.BodyPublishers.ofString(corpo)).build(),
                 HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void deveRejeitarAssinaturaInvalidaSemPersistir() throws Exception {
+        var beneficiario = preparar("ATIVA");
+        var requisicao = HttpRequest.newBuilder(URI.create("http://localhost:" + porta + "/operacoes-portabilidade"))
+                .header("Content-Type", "application/json")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .header("X-Assinatura-HMAC", "00".repeat(32))
+                .POST(HttpRequest.BodyPublishers.ofString(corpo(beneficiario))).build();
+        var resposta = cliente.send(requisicao, HttpResponse.BodyHandlers.ofString());
+        assertThat(resposta.statusCode()).isEqualTo(401);
+        assertThat(quantidade(beneficiario)).isZero();
     }
 
     private int quantidade(String beneficiario) {

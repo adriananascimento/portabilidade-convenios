@@ -231,3 +231,22 @@ edição são documentais e não substituem testes das aplicações.
 - Limites: sem versão temporal remota ou garantia de atualização contínua;
   solicitações concorrentes podem consultar HTTP em paralelo. Timeout real de
   conexão não foi simulado; a configuração de 3s foi verificada no factory efetivo.
+
+## Falha de autenticação na integração — 14/11/2026
+
+- Ferramenta: Codex. Orientação: alterações pontuais, preservar HMAC, transações,
+  auditoria e idempotência; não expor dados sensíveis nem adicionar reenvio.
+- Analisados criarOperacao, cliente HTTP, recuperar, resultadoConhecido, handler e auditoria.
+- Removido encapsulamento genérico dos erros HTTP do envio, preservando seu status;
+  falhas locais de preparação são encapsuladas em CentralIndisponivelException.
+- HTTP 401 registra FALHA_ENVIO e o evento existente FALHA_INTEGRACAO na mesma
+  transação curta, antes de lançar AutenticacaoCentralException, mapeada para 502.
+- Sem alteração no HMAC, regras de negócio ou esquema. Sem logs adicionais ou
+  propagação do conteúdo remoto ao frontend. Recuperação idempotente permanece
+  sem reenvio e retorna 503 para operação sem protocolo; conteúdo divergente, 409.
+- Testes adicionados para 401, HTTP 502, auditoria, idempotência, 408 e propagação
+  real dos status HTTP pelo RestClient. Construtores de testes adequados ao HMAC
+  preexistente. Revisão humana final ainda não registrada.
+- Validação: `cd backend && ./mvnw -o -q test`: 87 testes, zero falhas, erros ou ignorados; código de saída 0.
+- Tentativa inicial bloqueada pelos locks do cache Maven no sandbox; execução
+  repetida com permissão ampliada. `git diff --check` passou.

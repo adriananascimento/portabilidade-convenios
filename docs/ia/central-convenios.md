@@ -419,3 +419,21 @@ preservadas para manter o contexto, sem alterar os ADRs.
 - Execução: primeira tentativa Maven foi bloqueada pelo sandbox no cache .m2;
   repetição com permissão de execução ampliada concluiu os testes. Maven emitiu
   avisos HTTP 401 para metadados de repositórios externos, sem impedir o build.
+
+## Falha de autenticação na integração — 14/11/2026
+
+- Ferramenta: Codex. Orientação: alterações pontuais, preservar HMAC, transações,
+  auditoria e idempotência; não expor dados sensíveis nem adicionar reenvio.
+- Nenhuma alteração no código de produção ou na validação HMAC.
+- Teste HTTP adicionado para assinatura inválida: espera 401 e nenhuma operação
+  persistida. Helper dos testes de operações passa a assinar requisições válidas
+  com a configuração de teste existente, para preservar cobertura das regras.
+- Revisão humana final ainda não registrada.
+- Validação: `cd central-convenios && ./mvnw -o -q test`: 44 testes, 2 falhas, zero erros ou ignorados; código de saída 1.
+  O teste novo de assinatura inválida passou. Falhas nos testes existentes:
+  deveCriarOperacaoComVinculosEConta espera 2 campos, mas o DTO atual tem 4;
+  deveValidarListaCamposEHeader espera 400, mas ConstraintViolationException
+  lançada pelo controller atual não possui handler e resulta em 500.
+  Nenhuma correção fora do escopo foi aplicada.
+- Tentativa inicial bloqueada pelos locks do cache Maven no sandbox; execução
+  repetida com permissão ampliada. `git diff --check` passou.

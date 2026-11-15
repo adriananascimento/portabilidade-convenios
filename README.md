@@ -356,6 +356,10 @@ aceita o status oficial `FALHA_TECNICA`. Sucesso e repetição bem-sucedida reto
 local pode enviá-lo, inclusive sob concorrência entre instâncias.
 
 Operações existentes sem protocolo não são reenviadas e retornam 503.
+Quando o envio recebe HTTP 401 da Central, a API retorna 502 com a mensagem
+“Falha de autenticação na comunicação com a Central de Convênios.” e persiste
+`FALHA_ENVIO` com o evento `FALHA_INTEGRACAO`. Repetir a chave mantém a operação
+registrada, sem reenvio ou novos eventos, seguindo o retorno 503 descrito acima.
 `PENDENTE_ENVIO` e `ENVIO_INDETERMINADO` podem ficar paradas após falhas ou
 reinicialização. Recuperação com retry e backoff será implementada posteriormente.
 Não há polling, auditoria ou retry automático. A listagem consulta exclusivamente o banco local com `Pageable`, por

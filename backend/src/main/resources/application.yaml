@@ -20,3 +20,6 @@ spring:
 central:
   convenios:
     url: ${CENTRAL_CONVENIOS_URL:http://localhost:8081}
+    
+  integracao:
+        chave-hmac: ${CENTRAL_HMAC_SECRET:chave_para_teste}

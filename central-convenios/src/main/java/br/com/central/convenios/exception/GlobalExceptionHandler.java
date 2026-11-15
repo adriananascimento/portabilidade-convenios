@@ -1,5 +1,6 @@
 package br.com.central.convenios.exception;
 
+import br.com.central.convenios.seguranca.AssinaturaHmac;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -29,6 +30,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RequisicaoInvalidaException.class)
     public ProblemDetail handleRequisicaoInvalida(RequisicaoInvalidaException ex) {
         return handleException(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(AssinaturaException.class)
+    public ProblemDetail handleRequisicaoInvalida(AssinaturaException ex) {
+        return handleException(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
     private ProblemDetail handleException(HttpStatus status, String mensagem) {

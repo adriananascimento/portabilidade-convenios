@@ -199,3 +199,12 @@ atividades ao frontend apenas para preencher este documento.
   zero falhas; `npm run build --prefix frontend` e
   `npm run lint --prefix frontend` passaram; `git diff --check` passou.
   Node emitiu aviso de API experimental para MockTimers.
+
+## Falha de autenticação na integração — 14/11/2026
+
+- Ferramenta: Codex. Orientação: alterações pontuais, preservar HMAC, transações,
+  auditoria e idempotência; não expor dados sensíveis nem adicionar reenvio.
+- Nenhum arquivo de produção do frontend alterado nesta tarefa.
+- Contrato do backend para falha de autenticação entre serviços documentado:
+  HTTP 502 com mensagem sanitizada em ProblemDetail.detail.
+- Revisão humana final ainda não registrada.

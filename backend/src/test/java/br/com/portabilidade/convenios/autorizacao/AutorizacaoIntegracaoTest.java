@@ -42,7 +42,7 @@ class AutorizacaoIntegracaoTest {
         });
         central.start();
         var client = new CentralConveniosClient(RestClient.builder()
-                .baseUrl("http://localhost:" + central.getAddress().getPort()).build());
+                .baseUrl("http://localhost:" + central.getAddress().getPort()).build(), tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build(), "chave-teste");
         mvc = MockMvcBuilders.standaloneSetup(new AutorizacaoController(new AutorizacaoService(client)))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }

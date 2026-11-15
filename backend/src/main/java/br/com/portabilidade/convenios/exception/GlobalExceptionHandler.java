@@ -9,6 +9,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(AutenticacaoCentralException.class)
+    public ProblemDetail tratarAutenticacaoCentral(AutenticacaoCentralException excecao) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, excecao.getMessage());
+    }
+
     @ExceptionHandler(SincronizacaoException.class)
     public ProblemDetail tratarSincronizacao(SincronizacaoException excecao) {
         return ProblemDetail.forStatusAndDetail(excecao.getStatus(), excecao.getMessage());

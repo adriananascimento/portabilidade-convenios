@@ -91,6 +91,10 @@ public class OperacaoService {
         } catch (CentralIndisponivelException | RestClientException excecao) {
             atualizarFalha(criada.getId(), resultadoConhecido(excecao)
                     ? StatusIntegracao.FALHA_ENVIO : StatusIntegracao.ENVIO_INDETERMINADO, false);
+            if (excecao instanceof RestClientResponseException respostaErro
+                    && respostaErro.getStatusCode().value() == 401) {
+                throw new AutenticacaoCentralException(excecao);
+            }
             throw new CentralIndisponivelException(excecao);
         }
         var corpo = resposta.getBody();
