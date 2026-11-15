@@ -1,51 +1,26 @@
 # Uso de IA — Backend
 
-## Ferramentas utilizadas
+O desenvolvimento foi conduzido de forma incremental, utilizando o Codex como ferramenta de apoio à análise, implementação, testes e documentação.
+A definição do escopo, avaliação das propostas técnicas e decisões de arquitetura, estabelecendo requisitos e restrições para cada etapa foram feitos manualmente.
+Entre as decisões registradas estão a separação dos estados de integração e operação, o comportamento da idempotência, as regras de sincronização, a estratégia de auditoria e os limites do retry.
+O Codex auxiliou na implementação dessas decisões, na criação de testes e na identificação de problemas durante as validações.
+Os resultados foram avaliados ao longo do desenvolvimento, com ajustes solicitados quando necessário. Os registros distinguem aprovações de propostas, resultados de testes e revisões finais de código, quando documentadas.
 
-Não há ferramenta ou modelo de IA identificado para implementações do backend.
-O histórico Git foi consultado nesta reorganização documental.
+## Orientações e restrições
 
-## Finalidade
+As implementações foram realizadas de forma incremental, seguindo os contratos existentes e as convenções do projeto.
+As principais orientações foram:
+- Preservar a separação entre Portal e Central de Convênios.
+- Manter a nomenclatura de domínio em português.
+- Não adicionar funcionalidades ou dependências fora do escopo solicitado.
+- Apresentar decisões técnicas relevantes para aprovação antes da implementação.
+- Preservar alterações existentes e registrar os resultados dos testes.
 
-Registrar a evidência disponível sobre o backend principal, distinguindo suas
-atividades das implementações auxiliadas por IA na Central de Convênios.
+## Atividades e validações
 
-## Implementações auxiliadas
+As seções seguintes documentam cada implementação auxiliada pelo Codex, incluindo solicitações, decisões aprovadas, alterações realizadas, testes e limitações.
 
-Não há implementação do backend comprovadamente auxiliada ou gerada por IA nos
-registros existentes. O histórico identifica as seguintes atividades, sem
-comprovar o modo de desenvolvimento:
-
-| Commit | Atividade |
-| --- | --- |
-| `7f3f4c0` | Estrutura inicial Spring Boot, Maven e configuração de banco/Compose. |
-| `9e50dcb` | RestClient para a Central, configuração e DTOs de agenda. |
-| `9446e8f` | Controller e Service de consulta em `GET /api/beneficiarios/{beneficiarioId}/agenda`. |
-| `2f84f96` | Tratamento de indisponibilidade da Central com exceção própria e resposta HTTP 503. |
-
-## Decisões humanas
-
-Não há registro específico de aprovação ou revisão humana dessas implementações.
-A autoria dos commits não permite afirmar desenvolvimento exclusivamente humano.
-A [ADR-0001](../adr/0001-isolamento-da-central-de-convenios.md) documenta o
-isolamento entre backend e Central e foi preservada, sem inferir sua autoria.
-
-## Validações
-
-Não foram encontrados resultados documentados de validações dessas atividades
-no registro de IA. Os testes da Central não comprovam validação do backend.
-Nenhum teste da aplicação foi executado nesta reorganização documental.
-
-## Limitações
-
-A reorganização atual foi realizada com auxílio do Codex: leitura do registro
-anterior e do histórico Git, separação dos três documentos e atualização dos links
-no README e da referência no AGENTS.md. Trata-se de documentação transversal,
-sem implementação de backend, Central ou frontend. O usuário definiu o escopo;
-não há revisão humana final documentada até esta edição. As verificações desta
-edição são documentais e não substituem testes das aplicações.
-
-## Listagem paginada de autorizações — 13/11/2026
+## Listagem paginada de autorizações
 
 - Tarefa: GET /api/autorizacoes integrado à Central pelo client existente.
 - Trabalho do Codex: endpoint, delegação no service, chamada RestClient e
@@ -64,7 +39,7 @@ edição são documentais e não substituem testes das aplicações.
   repetição com permissão de execução ampliada concluiu os testes. Maven emitiu
   avisos HTTP 401 para metadados de repositórios externos, sem impedir o build.
 
-## Persistência local de operações — 14/11/2026
+## Persistência local de operações
 
 - Tarefa solicitada: analisar as configurações e implementar somente a estrutura
   local de persistência, sem modificar Central, frontend ou fluxos existentes.
@@ -92,7 +67,7 @@ edição são documentais e não substituem testes das aplicações.
   outros arquivos foram preservadas. Os arquivos de status do compilador em
   `backend/target` são gerados pelo Maven durante a validação.
 
-## Criação local e integração idempotente — 14/11/2026
+## Criação local e integração idempotente
 
 - Ferramenta: Codex. Tarefa: adaptar somente a criação de operações para usar a
   persistência existente, integrar com a Central e preservar idempotência.
@@ -112,7 +87,7 @@ edição são documentais e não substituem testes das aplicações.
   timeout, 408, 5xx e respostas inválidas usam `ENVIO_INDETERMINADO`.
   Registros existentes sem confirmação retornam 503 sem reenvio.
 - Escopo: nenhuma mudança na Central ou frontend, nenhuma dependência nova,
-  auditoria, polling ou retry automático. README e ADR-0006 documentam que
+  auditoria, polling ou retry automático. README e ADR-0005 documentam que
   operações pendentes/indeterminadas podem ficar paradas após falhas ou
   reinicialização; retry com backoff fica para etapa posterior.
 - Testes adicionados: `OperacaoCriacaoTest`, com PostgreSQL e schema temporário,
@@ -136,7 +111,7 @@ edição são documentais e não substituem testes das aplicações.
   Arquivos gerados de status do compilador em `backend/target` foram atualizados.
 
 
-## Listagem local de operações — 14/11/2026
+## Listagem local de operações
 
 - Ferramenta: Codex. Escopo: somente a listagem do backend, testes e documentação.
 - Aprovação humana: DTO e consulta local aprovados antes da implementação. O
@@ -147,7 +122,7 @@ edição são documentais e não substituem testes das aplicações.
   transacional e remoção do método remoto de listagem que ficou sem uso.
   Nenhuma alteração no fluxo de criação, na Central ou no frontend.
 - Contrato incompatível e próximos ajustes do frontend documentados no README
-  e na ADR-0007. Estados e data representam os valores locais.
+  e na ADR-0005. Estados e data representam os valores locais.
 - Testes novos: `OperacaoListagemTest`, PostgreSQL real, schema temporário e
   rollback por caso; verifica paginação, desempate por ID, vazio, página fora do
   total, seis campos JSON sem aliases, protocolo/status nulos, estados preenchidos,
@@ -160,7 +135,7 @@ edição são documentais e não substituem testes das aplicações.
   Hibernate executaram no PostgreSQL local. Arquivos de status do compilador em
   `backend/target` foram atualizados pelo Maven. `git diff --check` passou.
 
-## Auditoria de operações — 14/11/2026
+## Auditoria de operações
 
 - Ferramenta: Codex. Escopo autorizado: auditoria persistente e endpoint de
   histórico do backend, migration, testes e documentação. Central e frontend
@@ -180,7 +155,7 @@ edição são documentais e não substituem testes das aplicações.
   histórico vazio e desempate. Testes de rollback usam persistência e flush
   reais antes da exceção simulada, incluindo falha da recuperação. Teste de
   listagem adaptado apenas à nova dependência do construtor do service.
-- Limites registrados no README e ADR-0008: interrupções antes do commit podem
+- Limites registrados no README e ADR-0006: interrupções antes do commit podem
   deixar histórico incompleto; não há atomicidade distribuída ou backfill;
   imutabilidade no fluxo normal não impede SQL administrativo.
 - A primeira execução no sandbox falhou antes dos testes por acesso aos locks
@@ -192,7 +167,7 @@ edição são documentais e não substituem testes das aplicações.
   compilador em `backend/target` já tinham alterações e foram atualizados pelo
   Maven; demais alterações preexistentes foram preservadas.
 
-## Sincronização manual de status — 14/11/2026
+## Sincronização manual de status
 
 - Ferramenta: Codex. Escopo: somente backend, endpoint manual, integração de
   consulta, controle otimista, migration, testes e documentação. Sem alteração
@@ -232,7 +207,7 @@ edição são documentais e não substituem testes das aplicações.
   solicitações concorrentes podem consultar HTTP em paralelo. Timeout real de
   conexão não foi simulado; a configuração de 3s foi verificada no factory efetivo.
 
-## Falha de autenticação na integração — 14/11/2026
+## Falha de autenticação na integração
 
 - Ferramenta: Codex. Orientação: alterações pontuais, preservar HMAC, transações,
   auditoria e idempotência; não expor dados sensíveis nem adicionar reenvio.
@@ -251,7 +226,7 @@ edição são documentais e não substituem testes das aplicações.
 - Tentativa inicial bloqueada pelos locks do cache Maven no sandbox; execução
   repetida com permissão ampliada. `git diff --check` passou.
 
-## Retry do envio inicial à Central — 14/11/2026
+## Retry do envio inicial à Central
 
 - Ferramenta: Codex. Solicitação: até três envios, backoff 1s/2s, somente falhas
   transitórias, JSON/HMAC/chave invariáveis, auditoria independente, sem reenvio
@@ -259,7 +234,7 @@ edição são documentais e não substituem testes das aplicações.
   atualizarFalha, transações, idempotência e testes existentes.
 - Implementado laço explícito sem nova dependência, callback de auditoria por envio
   em REQUIRES_NEW e classificação de conexão como indeterminada. A contagem é dada
-  pelos eventos de tentativa existentes. Documentados ADR-0010 e README.
+  pelos eventos de tentativa existentes. Documentados ADR-0008 e README.
 - Testes exercitam RestClient real com transporte simulado e persistência PostgreSQL,
   inspecionando JSON, HMAC, chave, intervalos, transações, histórico e operação única.
   Testes anteriores foram ajustados para o callback independente e conexão indeterminada.
@@ -268,10 +243,10 @@ edição são documentais e não substituem testes das aplicações.
   permitiu acesso ao cache e ao PostgreSQL local. Revisão humana ainda não registrada.
 - Validação final: `cd backend && ./mvnw -o -q test`: 100 testes,
   zero falhas, erros ou ignorados; código de saída 0. `git diff --check` passou.
-  A suíte da Central foi executada e suas duas falhas estão registradas em
-  `docs/ia/central-convenios.md`; nenhum código da Central foi alterado.
+  Na execução histórica dessa etapa, a suíte da Central apresentou duas falhas,
+  registradas em `docs/ia/central-convenios.md`; nenhum código da Central foi alterado.
 
-## Finalização do frontend — 15/11/2026
+## Finalização do frontend
 
 - Codex consultou DTO de eventos, enum de tipos, controladores, serviços e handler
   de erros para implementar o frontend usando contratos reais.

@@ -1,472 +1,293 @@
-# Portabilidade de Convênios
+# Plataforma de Portabilidade de Convênios de Desconto em Folha
 
-## Documentação de uso de IA
+Aplicação full stack desenvolvida para o desafio técnico, usando **React/TypeScript**, **Java/Spring Boot** e **PostgreSQL**. Permite autorizar beneficiários, consultar parcelas disponíveis, solicitar a portabilidade para outra conta e acompanhar o resultado na **Central de Convênios simulada**.
+A Central funciona separadamente, com banco de dados e regras próprias.
 
-- [Backend](docs/ia/backend.md)
-- [Central de Convênios](docs/ia/central-convenios.md)
-- [Frontend](docs/ia/frontend.md)
+## 1. Visão geral e arquitetura
 
-## Central de Convênios: registro de autorização
+| Componente | Responsabilidade | Tecnologias |
+| --- | --- | --- |
+| `frontend/` | Interface de autorizações, consulta de agenda, solicitação de portabilidade, listagem, histórico e acompanhamento | React 19, TypeScript 6, Vite 8, Material UI 9 |
+| `backend/` | API do Portal, integração com a Central, idempotência, persistência local, auditoria e sincronização de status | Java 21, Spring Boot 4.1.2, Spring Data JPA, RestClient |
+| `central-convenios/` | Simulação da Central: autorizações, parcelas, reservas e processamento assíncrono | Java 21, Spring Boot 4.1.2, Spring Data JPA |
+| Bancos de dados | Persistência independente do Portal e da Central | PostgreSQL 17, Flyway |
+| Infraestrutura local | Compilação e execução dos serviços; entrega estática do frontend | Docker Compose, Nginx |
 
-A aplicação `central-convenios` é independente do backend e atende na porta 8081.
-Requisitos: Java 21, Docker com Compose e acesso às dependências Maven.
 
-```sh
+**Responsabilidades:** o Portal não acessa o banco da Central. A Central mantém os dados oficiais de autorizações, parcelas e resultados. O Portal guarda as solicitações, os status de integração e o histórico de eventos.
+
+### Fluxo funcional
+
+1. Uma autorização é registrada para o beneficiário e seu convênio.
+2. O Portal consulta as parcelas que podem ser transferidas.
+3. O usuário seleciona as parcelas e informa a conta de destino.
+4. O Portal salva a solicitação e a envia à Central com uma chave de idempotência.
+5. A Central valida a solicitação, reserva as parcelas e registra a operação como `PENDENTE`.
+6. A Central processa a operação depois e a confirma ou rejeita. Falhas técnicas recebem um status próprio.
+7. A interface consulta o Portal periodicamente. O Portal consulta a Central quando necessário e mantém o histórico dos eventos.
+
+## 2. Pré-requisitos
+
+Para executar tudo com Docker:
+
+- Docker Engine ou Docker Desktop, com Docker Compose v2.
+- Portas locais disponíveis: **3000**, **8080**, **8081**, **5433** e **5434**.
+- Acesso às imagens Docker e aos repositórios de dependências durante o build.
+
+Para executar as aplicações na máquina e deixar apenas os bancos no Docker:
+
+- **JDK 21**; os módulos Java incluem Maven Wrapper (`./mvnw`).
+- **Node.js 22** e npm.
+
+Execute os comandos a partir da **raiz do projeto**, exceto quando indicado.
+
+## 3. Como executar
+
+### Opção A — Aplicação completa com Docker Compose
+
+A Central e o Portal usam arquivos Docker Compose separados.
+
+**1. Subir a Central simulada e seu PostgreSQL:**
+
+```bash
+docker compose -f docker-compose.central.yml up -d --build
+```
+
+**2. Subir o Portal, seu PostgreSQL e o frontend:**
+
+```bash
+docker compose -f docker-compose.portal.yml up -d --build
+```
+
+**3. Verificar os serviços e consultar os logs:**
+
+```bash
+docker compose -f docker-compose.central.yml ps
+docker compose -f docker-compose.portal.yml ps
+
+docker compose -f docker-compose.central.yml logs -f central
+docker compose -f docker-compose.portal.yml logs -f backend frontend
+```
+
+| Serviço | Endereço local |
+| --- | --- |
+| Frontend | http://localhost:3000 |
+| API do Portal | http://localhost:8080/api/operacoes |
+| Central simulada | http://localhost:8081 |
+| PostgreSQL do Portal | `localhost:5433` |
+| PostgreSQL da Central | `localhost:5434` |
+
+### Opção B — Aplicações no host e bancos no Docker
+
+**1. Subir apenas os bancos:**
+
+```bash
+docker compose -f docker-compose.central.yml up -d --wait postgres
+docker compose -f docker-compose.portal.yml up -d --wait postgres
+```
+
+**2. Iniciar a Central** (terminal 1):
+
+```bash
 cd central-convenios
-docker compose up -d --wait
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5434/central_convenios ./mvnw spring-boot:run
+```
+
+**3. Iniciar o backend do Portal** (terminal 2, a partir da raiz):
+
+```bash
+cd backend
 ./mvnw spring-boot:run
 ```
 
-O Flyway aplica as migrações V1 (autorizações), V2 (parcelas), V3 (dados fictícios),
-V4 (operações), V5 (estados finais), V6 (resultado do processamento), V7
-(reservas ativas), V8 (remoção do status base de parcelas) e V9 (retry) automaticamente. O Hibernate apenas valida
-o esquema. O PostgreSQL de desenvolvimento usa a porta 5434; as credenciais locais
-estão no Compose e em `application.yaml`. Em outros ambientes, configure
-`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`.
+**4. Iniciar o frontend** (terminal 3, a partir da raiz):
 
-```sh
-curl -i -X POST http://localhost:8081/autorizacoes \
-  -H 'Content-Type: application/json' \
-  -d '{"beneficiarioId":"BEN-001","convenioId":"CONV-001"}'
-```
-
-O primeiro registro retorna `201`; reenvios do mesmo par retornam `200` com a
-mesma autorização. A resposta contém `autorizacaoId` (UUID), `beneficiarioId`,
-`convenioId`, `dataAutorizacao` (gerada pelo servidor em UTC) e `status: ATIVA`.
-Campos ausentes, nulos, vazios, compostos apenas por espaços ou com mais de 100
-caracteres retornam `400`; corpo ausente ou JSON malformado também retorna `400`.
-Os identificadores são preservados, sem normalização de espaços ou caixa.
-
-A restrição única no PostgreSQL garante a unicidade, inclusive sob concorrência.
-A consulta prévia evita inserções desnecessárias em reenvios; se duas inserções
-competirem, a transação perdedora sofre rollback antes da consulta que recupera
-a autorização vencedora. A data usa precisão de microssegundos para manter a
-resposta inicial consistente com a persistência no PostgreSQL.
-Não há revogação nem reativação nesta etapa; o comportamento para um registro
-`REVOGADA` previamente inserido por outro meio não faz parte deste contrato.
-
-### Testes da Central
-
-Os testes de integração de autorização e agenda exercitam HTTP, JPA e Flyway com
-PostgreSQL real criado pelo Testcontainers. Requerem Docker ativo e acesso à imagem
-`postgres:17-alpine`; os contêineres são descartáveis e não usam o banco de desenvolvimento.
-O teste existente `CentralConveniosApplicationTests` usa a configuração normal da
-aplicação, portanto requer também o PostgreSQL local (ou variáveis de datasource
-apontando para um banco exclusivo de testes).
-
-```sh
-# Na pasta central-convenios, com Docker ativo:
-docker compose up -d --wait
-./mvnw test
-# Somente as suítes HTTP, com bancos isolados pelo Testcontainers:
-./mvnw -Dtest=AutorizacaoIntegracaoTest,AgendaIntegracaoTest test
-```
-
-A suíte de autorização cobre criação, reenvio, validação e oito requisições
-concorrentes. A suíte de agenda cobre autorização ativa, ausente e revogada,
-isolamento entre beneficiários e convênios, inclusão de hoje, exclusão de vencidas,
-ordenação entre convênios e listas vazias. A referência temporal é fixa nos testes,
-sem depender do dia da execução.
-
-## Consulta da agenda de parcelas
-
-```sh
-curl http://localhost:8081/beneficiarios/BEN-001/agenda
-```
-
-Retorna `200 OK` com `beneficiarioId` e `parcelas`. Cada parcela contém `parcelaId`,
-`convenioId`, `valor`, `dataDesconto` e `status`. Apenas parcelas do beneficiário
-com autorização `ATIVA` para o mesmo convênio, status `DISPONIVEL`, data de desconto
-maior ou igual a hoje e sem reserva ativa são retornadas, em ordem crescente de data (desempate por identificador).
-A data de referência usa UTC. Sem parcelas elegíveis, inclusive para beneficiário
-sem registros, retorna `parcelas: []`.
-
-A V2 cria `parcelas` com identificadores textuais, valor `NUMERIC(15,2)`, data
-`DATE` e status `DISPONIVEL`. A disponibilidade efetiva também depende da ausência
-de reserva ativa: operações pendentes ou confirmadas tornam a parcela indisponível. O índice por beneficiário e data auxilia
-a seleção. Não há endpoint de cadastro nem vínculo obrigatório com autorização:
-a parcela pode existir antes do consentimento e só fica visível quando autorizado.
-
-A V3 inclui parcelas fictícias de `BEN-001` e `BEN-002`, dos convênios `CONV-001`
-e `CONV-002`, com datas vencidas em 2020 e futuras em 2099. Para consultar dados
-visíveis de `BEN-001`, registre sua autorização para `CONV-001` com o POST mostrado
-acima; a agenda então inclui `PAR-002` e `PAR-001`, nessa ordem. A migração não
-insere autorizações. Os dados fictícios serão inseridos em todo banco que aplicar
-V3; as datas futuras dos exemplos permanecem válidas até 2099.
-
-## Registro de operações de portabilidade
-
-Após registrar as autorizações dos convênios envolvidos:
-
-```sh
-curl -i -X POST http://localhost:8081/operacoes-portabilidade \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: 89acac52-923a-4d4b-ab6a-776d7ad993be' \
-  -d '{"beneficiarioId":"BEN-001","parcelasIds":["PAR-001","PAR-002"],"contaDestino":{"banco":"001","agencia":"1234","conta":"123456-7"}}'
-```
-
-Retorna `202 Accepted` com `{"protocolo":"UUID","status":"PENDENTE"}`.
-O header é obrigatório e deve ter a representação UUID completa com hífens.
-Todos os campos são obrigatórios, os textos aceitam até 100 caracteres e a lista
-não pode ser vazia nem conter identificadores repetidos. Valores textuais são
-preservados, sem normalização. A ordem da lista não altera o conteúdo para
-idempotência. A mesma chave e o mesmo conteúdo retornam sempre o protocolo
-original, mesmo após a reserva; conteúdo diferente com a mesma chave retorna `409`.
-
-Erros: `400` para header/corpo inválido ou parcelas repetidas; `422` para parcela
-inexistente ou autorização ausente/revogada em qualquer convênio; `409` para
-parcela de outro beneficiário, vencida, com status diferente de `DISPONIVEL`,
-já reservada ou chave reutilizada com conteúdo diferente. A data de desconto
-precisa ser igual ou posterior a hoje em UTC, seguindo a elegibilidade da agenda.
-Falhas desfazem toda a operação, sem reservar parcialmente as parcelas.
-
-A V4 cria `operacoes_portabilidade` e `operacoes_parcelas`. Protocolo e chave
-usam UUID, criação usa timestamp com fuso; valores das parcelas continuam em
-`NUMERIC(15,2)` na tabela existente. O vínculo tem chave primária composta,
-estrangeiras para operação/parcela. A unicidade global original da parcela é
-substituída pela V7: o histórico aceita novas tentativas e a tabela
-`reservas_parcelas` mantém a unicidade das reservas ativas. A chave de idempotência
-também é única. O Service usa transação independente, disputa a chave primeiro e
-bloqueia parcelas em ordem de identificador para evitar reservas concorrentes e
-ciclos de locks. As restrições do banco também protegem contra duplicidade;
-a recuperação da chave vencedora ocorre depois do rollback da transação perdedora.
-O vínculo é uma coleção JPA de identificadores persistida na tabela relacional,
-sem expor entidades na API. Não há novas dependências.
-
-O POST registra operações `PENDENTE` e cria todas as reservas na mesma transação.
-Nenhum processamento ocorre na requisição. A consulta não modifica o estado.
-
-```sh
-cd central-convenios
-./mvnw -Dtest=OperacaoIntegracaoTest test
-```
-
-A suíte de operações usa HTTP e PostgreSQL via Testcontainers e cobre criação,
-validações, rollback, autorizações por convênio, idempotência e concorrência com
-chaves iguais e diferentes. Para todas as suítes, execute `./mvnw test`, mantendo
-o banco local disponível para o teste de contexto existente.
-
-## Consulta de operação de portabilidade
-
-```sh
-curl http://localhost:8081/operacoes-portabilidade/550e8400-e29b-41d4-a716-446655440000
-```
-
-Retorna 200 com `protocolo`, `status` (`PENDENTE`, `CONFIRMADA`, `REJEITADA` ou `FALHA_TECNICA`),
-`dataCriacao`, `dataProcessamento` e `motivoRejeicao`. As datas usam ISO-8601 com
-fuso; a aplicação gera datas em UTC. Os dois últimos campos são nulos enquanto
-pendente. Protocolo inexistente retorna 404. A consulta é somente leitura.
-A resposta do POST continua contendo somente protocolo e status.
-A V5 existente amplia os estados; V6 adiciona os campos do processamento sem
-alterar migrações anteriores.
-
-## Processamento assíncrono e reservas
-
-O `@Scheduled` chama o serviço de processamento em segundo plano. Configuração
-em `central-convenios/src/main/resources/application.yaml`:
-
-```yaml
-central:
-  processamento:
-    habilitado: true
-    intervalo: PT5S
-    atraso-minimo: PT10S
-```
-
-As durações usam ISO-8601. `intervalo` é o intervalo após terminar cada execução;
-`atraso-minimo` determina a idade mínima da operação, inclusive nas chamadas
-diretas do serviço. Pode ser `PT0S`; valores negativos são recusados. Configure
-por `CENTRAL_PROCESSAMENTO_HABILITADO`, `CENTRAL_PROCESSAMENTO_INTERVALO` e
-`CENTRAL_PROCESSAMENTO_ATRASO_MINIMO`. Por padrão há pelo menos dez segundos
-para observar PENDENTE; o processamento efetivo depende do próximo ciclo.
-
-Cada ciclo seleciona até 100 operações pendentes antigas, por data/protocolo.
-Cada operação tem transação independente: bloqueia a operação para escrita,
-reconfere status/idade e bloqueia suas parcelas em ordem de ID. Revalida o
-beneficiário, o status DISPONIVEL, a data de desconto >= hoje UTC e autorização
-ATIVA para cada convênio. Autorizações consultadas permanecem bloqueadas para
-leitura até o fim da transação. A operação válida fica CONFIRMADA; a inválida
-fica REJEITADA, com motivo determinístico (parcela indisponível ou ausência de
-autorização ativa). Ambas recebem `dataProcessamento`. Não há sorteio, integração
-externa ou alteração de estado pelo GET/POST.
-
-A V7 preserva `operacoes_parcelas` como histórico via `@ElementCollection` e
-migra vínculos pendentes/confirmados para `reservas_parcelas`. A chave primária
-por parcela impede duas reservas concorrentes; a FK composta obriga a existência
-do vínculo histórico. O POST insere reservas, sem sobrescrever reservas existentes.
-Na confirmação elas permanecem; na rejeição são removidas na mesma transação
-que finaliza a operação. O histórico não é removido. A parcela rejeitada pode
-ser tentada novamente quando elegível, com outra chave de idempotência.
-A mesma chave original continua retornando o protocolo e o estado atual da
-operação original, mesmo após outra tentativa. A agenda exclui parcelas com
-reserva ativa. O status base da parcela permanece DISPONIVEL; a reserva define
-a indisponibilidade durante PENDENTE e após CONFIRMADA.
-
-Execuções concorrentes serializam pela operação e não reprocessam estados finais.
-Uma falha técnica causa rollback. Em seguida, uma transação independente com
-lock registra a tentativa, uma categoria de erro sanitizada e o próximo horário.
-Falhas transitórias de infraestrutura têm no máximo cinco tentativas, com backoff
-de 5, 10, 20 e 40 segundos. A seleção e a revalidação verificam também
-`proxima_tentativa_em`. O relógio injetado determina os horários; o agendador pode
-executar depois do horário mínimo. Sucesso e rejeição também contam uma tentativa.
-
-A quinta falha transitória ou a primeira falha técnica permanente/não classificada
-encerra em `FALHA_TECNICA`, preservando reservas e histórico para reconciliação
-manual. Não há liberação automática nesse estado. Falhas de negócio continuam
-`REJEITADA`. O contador e o status sob lock impedem que falha tardia sobrescreva
-sucesso ou duplique o registro concorrente. `ultimo_erro` guarda somente uma
-categoria fixa e preserva a última falha mesmo se houver sucesso posterior.
-O ciclo continua nas demais operações; chamadas diretas propagam a exceção após
-registrá-la. Falha no próprio registro ou queda entre rollback e registro pode
-impedir a contabilização; não há garantia de contagem de cada execução física
-concorrente nessa janela. Classificação e trade-offs estão em
-[ADR-0003](docs/adr/0003-retry-processamento-portabilidade.md). Decisão de modelagem: `docs/adr/0002-processamento-e-reserva-de-parcelas.md`.
-
-Nos testes o agendador fica desabilitado; `ProcessamentoOperacaoService.processar`
-e `processarPendentes` são chamados diretamente com relógio fixo e criação
-persistida ajustada. Não há `Thread.sleep()` nem espera por agendamento.
-
-```sh
-cd central-convenios
-./mvnw -Dtest=OperacaoIntegracaoTest,MigracaoReservasIntegracaoTest test
-./mvnw test
-```
-
-Além do contrato HTTP, os testes cobrem atraso mínimo, confirmação, rejeição,
-liberação e nova tentativa com histórico, agenda, idempotência finalizada,
-concorrência do POST e do processador, rollback com falha real no commit e
-migração incremental com vínculos prévios e restrições de integridade.
-
-## Listagem de autorizações
-
-Com a Central (8081) e o backend (8080) em execução, inicie o frontend:
-
-```sh
+```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Acesse `/autorizacoes` no endereço exibido pelo Vite. O proxy `/api` encaminha
-as chamadas ao backend. A página exibe dez registros por vez; use Anterior e
-Próxima no DataGrid Community para navegar ou Nova autorização para cadastrar pelo Dialog MUI. Após salvar,
-o modal fecha e a primeira página é atualizada. Cancelar e Esc ficam bloqueados
-durante o envio.
+O Vite mostra a URL do frontend no terminal (normalmente `http://localhost:5173`). As chamadas `/api` são encaminhadas para `localhost:8080`.
 
-```sh
-curl 'http://localhost:8081/autorizacoes?pagina=0&tamanho=10'
-curl 'http://localhost:8080/api/autorizacoes?pagina=0&tamanho=10'
-```
-
-Os dois endpoints GET usam o mesmo contrato (exemplo com um registro):
-
-```json
-{
-  "conteudo": [{
-    "autorizacaoId": "550e8400-e29b-41d4-a716-446655440000",
-    "beneficiarioId": "BEN-001",
-    "convenioId": "CONV-001",
-    "dataAutorizacao": "2026-11-13T12:00:00Z",
-    "status": "ATIVA"
-  }],
-  "pagina": 0,
-  "tamanho": 10,
-  "totalElementos": 1,
-  "totalPaginas": 1
-}
-```
-
-`pagina` começa em zero (padrão 0); `tamanho` aceita 1 a 100 (padrão 10).
-Valores inválidos retornam 400. Sem resultados, `conteudo` é uma lista vazia;
-sem registros, os totais são zero. Página além do total também retorna lista vazia.
-A ordenação é fixa por data decrescente e UUID decrescente para desempate.
-A Central aplica paginação no PostgreSQL; DTOs explícitos mantêm o contrato
-independente da serialização interna de `Page`. O backend lê apenas o corpo
-esperado, sem propagar headers da Central. Falhas HTTP, de conexão ou de leitura
-da listagem retornam 503 com ProblemDetail sanitizado.
-
-Validação da listagem:
-
-```sh
-(cd central-convenios && ./mvnw -Dtest=AutorizacaoListagemIntegracaoTest test)
-(cd backend && ./mvnw -Dtest=AutorizacaoIntegracaoTest test)
-npm run build --prefix frontend
-npm run lint --prefix frontend
-```
-
-## Listagem de operações no frontend
-
-Com os mesmos serviços e o Vite em execução, acesse `/operacoes`. A tabela MUI
-Data Grid consulta `GET /api/operacoes?pagina=0&tamanho=10` e permite selecionar
-10, 25, 50 ou 100 registros por página. Mudanças de tamanho retornam à primeira
-página. Há indicação de carregamento, listagem vazia e erro com nova tentativa.
-
-O contrato paginado contém `conteudo`, `pagina`, `tamanho`, `totalElementos` e
-`totalPaginas`. Cada operação agora contém `id`, `beneficiarioId`, `dataCriacao` local,
-`statusIntegracao`, `statusOperacao` e `protocoloCentral`. Os dois últimos podem
-ser nulos. Não há aliases `protocolo` e `status` no GET. O POST mantém seu contrato.
-
-O frontend usa um tipo exclusivo para a listagem e o `id` local para identificar
-as linhas. A tabela apresenta separadamente status da integração e da operação,
-com Chips no padrão visual existente. Quando o status da operação é nulo,
-mostra “Aguardando envio” se a integração estiver em `PENDENTE_ENVIO` e
-“Não informado” nos demais casos. Protocolo nulo aparece como “Não informado”.
-Operações com falha de integração também são exibidas. O formulário de criação
-mantém seu contrato com `protocolo` e `status`. O acompanhamento automático é
-descrito em [frontend/README.md](frontend/README.md#acompanhamento-automático-de-operações).
-
-Clique em **Nova operação**, informe o beneficiário e use **Consultar parcelas**.
-Selecione as parcelas disponíveis, confira o total e preencha banco, agência e
-conta de destino. **Solicitar portabilidade** envia `POST /api/operacoes` com
-`beneficiarioId`, `parcelasIds` e `contaDestino`, além de `Idempotency-Key` UUID.
-A consulta usa `GET /api/beneficiarios/{beneficiarioId}/agenda`.
-
-Em caso de falha de comunicação, consulte a listagem para acompanhar o resultado,
-pois a operação pode ter sido criada. A chave permanece a mesma enquanto os dados
-não são editados no modal. Não há ação de reenvio manual de operações registradas. Alterar dados ou abrir uma nova operação
-inicia uma nova tentativa lógica. A chave é mantida somente enquanto o modal
-permanece aberto; fechar ou recarregar a página perde essa referência.
-Após o aceite, o modal mostra protocolo e status. HTTP 202 significa aceite para
-processamento assíncrono. Clique em **Confirmar** para fechar e atualizar a primeira
-página da listagem. A listagem acompanha automaticamente os status elegíveis
-a cada 10 segundos e oferece **Ver histórico** para cada operação.
-
-Testes do cliente HTTP:
+### Encerrar os ambientes
 
 ```bash
-node --test frontend/tests/operacoesApi.test.mjs
+docker compose -f docker-compose.portal.yml down
+docker compose -f docker-compose.central.yml down
 ```
 
-## Estrutura de persistência local do backend
+`down` para os serviços sem apagar os dados. `down -v` também apaga os volumes e deve ser usado apenas para reiniciar os dados do ambiente.
 
-O backend usa seu próprio PostgreSQL na porta 5433. Para executar e testar:
+## 4. Como testar o fluxo
 
-```sh
-cd backend
-docker compose up -d --wait
-./mvnw test
-./mvnw spring-boot:run
-```
+Com os serviços em execução, é possível criar uma autorização, consultar parcelas, solicitar a portabilidade e acompanhar seu status.
+A disponibilidade das parcelas depende das autorizações, datas e reservas existentes.
 
-A migration V1 cria as operações locais e os identificadores das parcelas.
-A entidade mantém conta de destino, status de integração separado do status
-oficial, UUID local, chave de idempotência e datas. O protocolo e o status oficial
-podem ser nulos. O Hibernate valida o esquema criado pelo Flyway.
-O POST `/api/operacoes` persiste `PENDENTE_ENVIO` antes de chamar a Central,
-sem transação aberta durante o HTTP. A V2 preserva a data de criação remota e
-aceita o status oficial `FALHA_TECNICA`. Sucesso e repetição bem-sucedida retornam
-202; chave com conteúdo divergente retorna 409. Somente quem cria o registro
-local pode enviá-lo, inclusive sob concorrência entre instâncias.
+### Dados de teste da Central de Convênios
 
-Operações existentes sem protocolo não são reenviadas e retornam 503.
-Quando o envio recebe HTTP 401 da Central, a API retorna 502 com a mensagem
-“Falha de autenticação na comunicação com a Central de Convênios.” e persiste
-`FALHA_ENVIO` com o evento `FALHA_INTEGRACAO`. Repetir a chave mantém a operação
-registrada, sem reenvio ou novos eventos, seguindo o retorno 503 descrito acima.
-`PENDENTE_ENVIO` e `ENVIO_INDETERMINADO` podem ficar paradas após falhas ou
-reinicialização. Recuperação com retry e backoff será implementada posteriormente.
-A listagem consulta exclusivamente o banco local com `Pageable`, por
-`dataCriacao DESC, id DESC`, inclusive registros sem protocolo. Os parâmetros
-`pagina` (padrão 0) e `tamanho` (padrão 10, entre 1 e 100), suas validações e os
-metadados da página foram preservados. Não há sincronização de status durante
-essa consulta; os estados retornados são os persistidos localmente.
-Detalhes e classificação das falhas: [ADR-0006](docs/adr/0006-criacao-local-e-integracao-idempotente.md).
+A Central já possui parcelas fictícias para testar a autorização e a portabilidade.
+Use os beneficiários `BEN-001` e `BEN-002` nos testes.
 
-`OperacaoCriacaoTest` também usa schema isolado para validar criação, repetição,
-concorrência e falhas. `OperacaoClientTest` valida o contrato HTTP do client.
+| Beneficiário | Parcela | Convênio | Valor | Data do desconto |
+|---|---|---|---|---|
+| BEN-001 | PAR-001 | CONV-001 | R$ 350,00 | 05/12/2099 |
+| BEN-001 | PAR-002 | CONV-001 | R$ 125,50 | 05/11/2099 |
+| BEN-001 | PAR-003 | CONV-002 | R$ 200,00 | 05/10/2099 |
+| BEN-001 | PAR-004 | CONV-001 | R$ 90,00 | 05/01/2020 |
+| BEN-002 | PAR-005 | CONV-002 | R$ 450,75 | 05/12/2099 |
+| BEN-002 | PAR-006 | CONV-002 | R$ 80,00 | 05/02/2020 |
 
-`OperacaoPersistenciaTest` aplica a migration em schema temporário exclusivo no
-PostgreSQL configurado e o remove ao final; requer permissão para criar schemas.
-As transações de teste são revertidas, sem limpar as tabelas existentes.
-Configurações do datasource podem ser sobrescritas pelas variáveis padrão
-`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`.
-A decisão está na [ADR-0005](docs/adr/0005-persistencia-local-operacoes-portabilidade.md).
+**Como testar:**
 
+1. Crie uma autorização para `BEN-001` ou `BEN-002` pela API da Central.
+2. Consulte a agenda de descontos do beneficiário autorizado.
+3. Selecione parcelas disponíveis e solicite a portabilidade.
+4. Acompanhe a atualização dos status da operação.
 
-`OperacaoListagemTest` valida paginação, desempate por ID, página fora do total,
-lista vazia, contrato JSON, campos nulos e ausência de chamadas à Central usando
-repository e PostgreSQL reais em schema temporário. Executar com:
+**Observações:**
+- Os dados são fictícios e servem apenas para testes.
+- As parcelas de 2020 servem para testar descontos vencidos.
+- As autorizações não vêm cadastradas. Crie uma pela tela de autorizações antes de consultar a agenda e solicitar a portabilidade.
 
-```sh
-cd backend
-./mvnw -Dtest=OperacaoListagemTest test
-```
+## 5. Simulação e integração com a Central de Convênios
 
-### Histórico de auditoria das operações
+A Central é um **serviço simulado independente**, com API, banco de dados, regras e processamento próprio. Ela não retorna apenas respostas HTTP fixas.
 
-`GET /api/operacoes/{id}/eventos` consulta pelo **UUID local** retornado na listagem
-(de modo distinto do protocolo da Central). Retorna uma lista com `id`, `tipo`,
-`descricao`, `dataCriacao`, `statusIntegracaoAnterior`, `statusIntegracaoNovo`,
-`statusOperacaoAnterior`, `statusOperacaoNovo` e `protocoloCentral`. Campos sem
-aplicação ao acontecimento são nulos. Ordem: `dataCriacao ASC, id ASC`.
-Operação inexistente retorna 404; operação existente sem eventos retorna `[]`.
+- **Autorização e agenda:** registra autorizações e consulta parcelas disponíveis por beneficiário e convênio.
+- **Registro de operação:** valida os dados e a assinatura HMAC-SHA256 do POST, evita registros duplicados e reserva parcelas dentro de uma transação.
+- **Concorrência:** usa bloqueios e regras do banco para impedir reservas conflitantes.
+- **Processamento assíncrono:** uma tarefa agendada processa operações pendentes e atualiza seus status.
+- **Sincronização:** o Portal consulta a Central por HTTP e salva os status. O frontend consulta o Portal periodicamente (polling).
+- **Tratamento de falhas:** o envio inicial pode ser tentado até três vezes em falhas temporárias, com intervalos crescentes. O conteúdo, a assinatura e a chave não mudam. Operações com resultado incerto não são reenviadas automaticamente depois.
 
-No frontend, **Ver histórico** abre um modal com data/hora em pt-BR no fuso do
-navegador, tipo amigável, descrição e transições de integração e operação quando
-presentes. A exibição ordena os eventos do mais recente para o mais antigo sem
-alterar a ordem da API; empates preservam a ordem recebida. Há carregamento,
-lista vazia, erro e nova tentativa. Fechar ou sair da tela cancela a consulta.
-Não são exibidos corpos HTTP, stack traces ou metadados internos da integração.
+O HMAC verifica a origem e a integridade do **POST inicial da operação**. Ele não autentica usuários, não substitui HTTPS e não é aplicado a todas as rotas.
 
-Os fluxos de operações, agenda e autorizações distinguem dados inválidos,
-autenticação/permissão do usuário, conflito, falha entre serviços, indisponibilidade,
-timeout e falha de rede. Mensagens públicas conhecidas de `ProblemDetail.detail`
-são reaproveitadas; outros detalhes usam textos locais. Campos e seleção do
-formulário são preservados após falha de criação. Aceite para processamento não
-é apresentado como portabilidade concluída.
+## 6. Bibliotecas externas e justificativas
 
-Validação do frontend (Node.js 22.21.1 utilizado):
+| Biblioteca ou ferramenta | Onde | Justificativa |
+| --- | --- | --- |
+| Spring Boot / Spring Web MVC | Portal e Central | APIs REST, injeção de dependências e estrutura consistente de aplicação |
+| Spring Data JPA / Hibernate | Portal e Central | Persistência relacional, transações e controle de concorrência |
+| Spring Validation | Portal e Central | Validação declarativa de entradas e contratos |
+| Flyway + módulo PostgreSQL | Portal e Central | Evolução versionada e reproduzível dos esquemas |
+| PostgreSQL JDBC Driver | Portal e Central | Comunicação com PostgreSQL |
+| Spring RestClient | Portal | Integração HTTP tipada com a Central e configuração de timeouts |
+| Spring Boot Actuator | Portal e Central | Infraestrutura para endpoints de saúde/monitoramento; observabilidade de negócio ainda não instrumentada |
+| Testcontainers + JUnit Jupiter | Central, testes | PostgreSQL isolado para validar persistência, migrations e concorrência reais |
+| React + React DOM | Frontend | Componentização e gerenciamento de estado da interface |
+| React Router | Frontend | Navegação entre telas e rotas da SPA |
+| Material UI / Emotion | Frontend | Componentes visuais, formulários, mensagens e tema consistentes |
+| MUI X Data Grid | Frontend | Tabelas com paginação e recursos de apresentação de dados |
+| TypeScript | Frontend | Tipagem e validação estática dos contratos utilizados na interface |
+| Vite | Frontend | Servidor de desenvolvimento, proxy e build de produção |
+| Testing Library + jsdom | Frontend, testes | Testes de componentes em ambiente DOM simulado |
+| Docker Compose / Nginx | Execução local | Orquestração dos serviços e entrega da SPA com proxy `/api` |
+
+O HMAC-SHA256 usa recursos da própria JDK, **sem biblioteca criptográfica extra**. As novas tentativas HTTP também foram implementadas sem biblioteca específica.
+
+## 7. Testes e validação
+
+**Frontend:**
 
 ```bash
+npm ci --prefix frontend
 npm test --prefix frontend
-npm run build --prefix frontend
 npm run lint --prefix frontend
+npm run build --prefix frontend
 ```
 
-Os testes de interface usam React Testing Library e JSDOM apenas em desenvolvimento;
-os demais exercitam HTTP e polling com fetch e temporizadores simulados. Não
-substituem integração com os serviços reais nem inspeção visual em navegador.
+**Backend do Portal:**
 
-A migration V3 é aplicada pelo Flyway na inicialização habitual. Os eventos são
-somente acrescentados durante o fluxo normal e compartilham a transação da
-alteração local correspondente. Repetições idempotentes não geram novos eventos.
-`TENTATIVA_ENVIO_CENTRAL` é gravado em transação independente após cada tentativa HTTP: não comprova recebimento
-e pode faltar se o processo for interrompido durante a comunicação ou antes do
-commit. Falha local após sucesso da Central resulta em `ENVIO_INDETERMINADO` se
-for possível persistir a recuperação. Não há reconstrução de histórico anterior
-à migration. Detalhes e limites: [ADR-0008](docs/adr/0008-auditoria-operacoes.md).
+```bash
+cd backend
+./mvnw test
+```
 
-### Sincronização manual do status
+**Central simulada:**
 
-`POST /api/operacoes/{id}/sincronizar-status`, sem corpo, consulta a Central pelo
-protocolo associado ao UUID local. Retorna 200 com o mesmo formato de um item da
-listagem: `id`, `beneficiarioId`, `dataCriacao`, `statusIntegracao`, `statusOperacao`
-e `protocoloCentral`. CONFIRMADA e REJEITADA são retornadas sem consulta externa.
-FALHA_TECNICA continua consultável; a Central atual não permite sair desse estado.
+```bash
+cd central-convenios
+./mvnw test
+```
 
-Uma mudança válida grava status e evento `STATUS_OPERACAO_ATUALIZADO` na mesma
-transação. Status igual não modifica data/versão nem duplica eventos. O controle
-com `@Version` impede sobrescrever alterações concorrentes; não há transação de
-banco durante HTTP. A migration V4 é aplicada automaticamente pelo Flyway.
+## 8. Decisões arquiteturais
 
-Erros em ProblemDetail: 404 para operação local inexistente, 409 para ausência de
-protocolo ou conflito concorrente não resolvido, 504 para timeout, 503 para Central
-indisponível, 502 para resposta/transição inválida ou protocolo remoto inexistente,
-e 500 para falha local na persistência da atualização. Falhas preservam o último
-status conhecido e não mudam `statusIntegracao`. Timeouts efetivos do cliente:
-3 segundos para conectar e 5 para ler. O endpoint não agenda consultas nem executa retry. O frontend realiza o polling
-automático descrito em [frontend/README.md](frontend/README.md#acompanhamento-automático-de-operações).
-Detalhes: [ADR-0009](docs/adr/0009-sincronizacao-manual-status.md).
+As decisões técnicas estão em [`docs/adr/`](docs/adr/):
 
+| ADR | Decisão |
+| --- | --- |
+| 0001 | Isolamento da Central de Convênios e dos ambientes |
+| 0002 | Processamento assíncrono e reserva de parcelas |
+| 0003 | Retry interno do processamento da Central |
+| 0004 | Polling no frontend para acompanhamento |
+| 0005 | Persistência local, idempotência e listagem de operações no Portal |
+| 0006 | Auditoria persistente de operações |
+| 0007 | Sincronização manual de status e controle de concorrência |
+| 0008 | Retry limitado do envio inicial à Central |
+| 0009 | Assinatura HMAC-SHA256 no envio inicial de operações |
 
-### Retry no envio inicial à Central
+### Trade-offs considerados
 
-O backend realiza até três envios, com espera de 1s e 2s para HTTP 502/503/504
-ou falhas de conexão/timeout. Cada envio reutiliza chave de idempotência, JSON e
-HMAC. Outros erros HTTP não geram retry; 401 preserva a resposta específica de
-falha de autenticação. 5xx e falhas de transporte sem confirmação resultam em
-`ENVIO_INDETERMINADO`; rejeições 4xx, exceto 408, em `FALHA_ENVIO`.
-Cada envio gera um evento de tentativa em transação curta independente; a contagem
-desses eventos representa os envios realizados. Não há transação durante HTTP ou
-backoff, nem reenvio de operação preexistente. O retry interno da Central permanece
-inalterado. Decisão e limitações: [ADR-0010](docs/adr/0010-retry-envio-inicial-central.md).
+| Escolha | Benefício | Limitação assumida |
+| --- | --- | --- |
+| Central independente, com banco próprio | Simula fronteira real de integração e evita acoplamento de dados | Dois serviços e dois bancos para configurar e manter |
+| HTTP síncrono para registro/consulta | Simplicidade de implementação e depuração | Falhas e latência de rede precisam de tratamento explícito |
+| Processamento assíncrono na Central | Separa aceite da operação de seu resultado | Necessidade de acompanhar estados intermediários |
+| Polling em vez de WebSocket/SSE | Menor complexidade de infraestrutura para o escopo do case | Requisições periódicas e atualização não instantânea |
+| Persistência local e auditoria | Rastreabilidade, idempotência e consulta mesmo quando a Central falha | Possibilidade de divergência temporária entre serviços |
+| Transações curtas + controle otimista | Evita manter transações abertas durante HTTP | Exige tratamento de conflitos e revalidação de estados |
+| Retry limitado no envio inicial | Recupera algumas falhas transitórias sem nova dependência | Não resolve automaticamente operações que ficaram indeterminadas após a requisição |
+| HMAC no POST de operação | Verifica integridade/autenticidade da mensagem entre serviços | Não substitui TLS, autenticação de usuário ou gestão de segredos de produção |
+
+O Portal e a Central não compartilham uma transação. Se houver timeout ou queda de conexão, o Portal pode não saber o resultado da operação na Central. Esse caso é registrado com um status específico.
+
+## 9. Documentação de IA e harness do agente
+
+O **Codex** foi usado como apoio no desenvolvimento. A documentação mostra **as solicitações, orientações, decisões técnicas e resultados dos testes**.
+
+| Documento | Conteúdo |
+| --- | --- |
+| [`AGENTS.md`](AGENTS.md) | Instruções do agente: contexto, padrões, idioma, limites de escopo e fluxo de trabalho |
+| [`docs/adr/`](docs/adr/) | Decisões arquiteturais e alternativas consideradas |
+| [`docs/ia/backend.md`](docs/ia/backend.md) | Solicitações, orientações, decisões, implementações e validações do Portal |
+| [`docs/ia/central-convenios.md`](docs/ia/central-convenios.md) | Histórico de IA da Central, incluindo registros iniciais e validações posteriores |
+| [`docs/ia/frontend.md`](docs/ia/frontend.md) | Histórico de IA da interface, decisões de UX/integração e testes |
+
+**Como o harness foi usado:** o arquivo `AGENTS.md` e o contexto de cada tarefa orientaram o Codex. As propostas foram avaliadas e ajustadas quando necessário, e as implementações passaram por testes e correções. Os arquivos em `docs/ia/` trazem **resumos dos prompts, restrições e resultados**, não conversas completas.
+Os registros mostram as decisões aprovadas, o apoio da IA e as revisões finais que foram documentadas.
+
+## 10. Limitações e evolução com mais tempo
+
+As melhorias abaixo **ainda não foram implementadas**:
+
+1. **Cadastro de beneficiários e contas bancárias:** cadastrar beneficiários e suas contas para selecionar os dados na portabilidade, sem preenchê-los toda vez.
+2. **Atualização de status por eventos:** usar RabbitMQ ou Amazon SQS para enviar mudanças de status da Central ao Portal. Usar SSE ou WebSocket para atualizar o frontend em tempo real, sem polling.
+3. **Recuperação de operações pendentes:** consultar e recuperar automaticamente operações sem confirmação da Central.
+4. **Tratamento de falhas técnicas:** permitir reprocessar ou tratar manualmente operações com `FALHA_TECNICA`, liberando parcelas reservadas com segurança quando necessário.
+5. **Testes ponta a ponta:** testar automaticamente todo o fluxo, da autorização até o resultado da portabilidade, incluindo a comunicação entre serviços.
+6. **Segurança:** adicionar login e permissões, HTTPS, proteção de dados e gestão segura das chaves de integração.
+7. **Logs e alertas:** centralizar logs e criar alertas para falhas, operações pendentes, reenvios e lentidão.
+8. **Automação de testes e deploy:** criar pipelines CI/CD para testar, verificar dependências e publicar as aplicações.
+9. **Performance e escalabilidade:** melhorar consultas, paginar o histórico e preparar a comunicação entre serviços para mais usuários e operações.
+10. **Monitoramento com Prometheus e Grafana:** coletar métricas de requisições, erros, tempo de resposta e uso de recursos com Prometheus. Criar dashboards no Grafana para acompanhar a saúde dos serviços.
+
+## 11. Estrutura do repositório
+
+```text
+.
+├── backend/                  # API e persistência do Portal
+├── central-convenios/        # Central simulada e processamento
+├── frontend/                 # Layout React/TypeScript
+├── docs/
+│   ├── adr/                  # Decisões arquiteturais
+│   └── ia/                   # Registros do uso de IA
+├── AGENTS.md                 # Orientações do agente
+├── docker-compose.central.yml
+├── docker-compose.portal.yml
+└── README.md
+```
+
+---
+
+**Escopo da entrega:** aplicação de demonstração com integração, portabilidade, persistência, auditoria e acompanhamento de status. A Central e os dados são simulados. Não há transações bancárias reais.

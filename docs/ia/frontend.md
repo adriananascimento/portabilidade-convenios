@@ -1,79 +1,26 @@
 # Uso de IA — Frontend
 
-## Operações de Portabilidade — 14/11/2026
+O frontend foi desenvolvido de forma incremental, com o Codex como ferramenta de apoio à análise dos contratos, implementação, testes e documentação.
+A desenvolvedora definiu o escopo e as restrições das etapas e avaliou propostas técnicas. Entre as decisões registradas estão a apresentação dos estados de integração, a elegibilidade para o polling, o tratamento de cancelamentos de requisições e a preservação dos dados em situações de erro. O Codex auxiliou na implementação e nas validações dessas orientações.
 
-- Ferramenta: Codex, para inspeção do contrato Java, implementação e validação.
-- Solicitação: primeira versão de `/operacoes` com MUI Data Grid Community,
-  paginação no servidor e estados de consulta, seguindo Autorizações.
-- Orientações: preservar Autorizações, backend e Central; nenhuma biblioteca
-  adicional, criação, formulário, trilha de eventos ou atualização automática.
-- Contrato conferido em OperacaoController, OperacaoPaginaDTO e
-  OperacaoRespostaDTO: parâmetros `pagina` (zero inicial) e `tamanho` (1–100),
-  envelope com `conteudo` e totais; registros só têm `protocolo` e `status`.
-- Resultado: cliente HTTP e tipos próprios, protocolo como identificador,
-  cancelamento de consultas antigas, tamanhos 10/25/50/100, retorno à página zero
-  ao mudar tamanho, loading, vazio, erro e nova tentativa. Status com Chip;
-  botão Nova operação desabilitado e coluna Ações sem controles.
-- Limitação apresentada ao usuário: beneficiário e data de criação ausentes
-  no DTO. Colunas mantidas com “Não informado” e aviso explícito na tela.
-  Solicitada preferência ao usuário; nenhuma revisão humana concluída registrada.
-- Validações: build (inclui TypeScript) e lint passaram. Script temporário com
-  fetch simulado verificou parâmetros, AbortSignal, leitura do DTO, falhas HTTP
-  400/500/503 e falha de rede. Não equivale a teste com backend real.
-- Integração real: tentativa de GET em localhost:8080 falhou por conexão recusada;
-  serviço não disponível. Sem validação visual ou ponta a ponta em navegador.
-  Vite avisou sobre bundle acima de 500 kB.
+## Ferramenta utilizada
 
-## Ferramentas utilizadas
+Codex, nas atividades documentadas abaixo.
 
-Não há ferramentas de IA documentadas para o frontend.
+## Orientações e restrições
 
-## Finalidade
+- Preservar a separação entre frontend, backend do Portal e Central de Convênios.
+- Utilizar nomenclatura e mensagens em português.
+- Respeitar os contratos HTTP e as convenções existentes do projeto.
+- Manter as alterações limitadas ao escopo de cada etapa, evitando dependências desnecessárias.
+- Apresentar decisões relevantes para avaliação antes da implementação.
+- Registrar testes, limitações e problemas encontrados nas validações.
 
-Registrar a ausência de atividades documentadas de uso de IA no frontend.
+## Atividades e validações
 
-## Implementações auxiliadas
+As seções seguintes apresentam as solicitações, decisões registradas, implementações auxiliadas pelo Codex e evidências de validação. As contagens de testes são resultados históricos de cada etapa, não uma medição única do estado atual do projeto.
 
-Ainda não há atividades documentadas. O registro anterior e o histórico de
-commits consultado não identificam implementações do frontend auxiliadas por IA.
-
-## Decisões humanas
-
-Não há decisões de implementação, desenvolvimento humano ou revisão humana do
-frontend comprovados nas fontes consultadas.
-
-## Validações
-
-Não há resultados de validações do frontend no registro de IA. Nenhum teste de
-frontend foi executado nesta reorganização documental.
-
-## Limitações
-
-Ausência de registro não comprova ausência de uso de IA. Não foram atribuídas
-atividades ao frontend apenas para preencher este documento.
-
-## Implementação do layout base — 13/11/2026
-
-- Ferramenta: Codex, para inspeção dos arquivos, implementação e validação.
-- Solicitação: layout responsivo em português, menu de Autorizações e Operações,
-  React Router e redirecionamento inicial, sem formulários ou integrações.
-- Orientações aplicadas: preservar alterações existentes, não modificar backend
-  ou Central de Convênios, separar layout e páginas e evitar novas dependências.
-- Resultado: layout compartilhado com `Outlet`, páginas com título e descrição,
-  `NavLink` com seleção visual e `aria-current`, navegação móvel sempre visível,
-  link para pular ao conteúdo e estilos próprios em azul com fundo claro.
-- Dependências: nenhuma adicionada; React Router já constava no projeto.
-- Validações: `npm run build --prefix frontend` (inclui `tsc -b`) e
-  `npm run lint --prefix frontend` concluídos com sucesso; `git diff --check`
-  sem erros. Script temporário com React DOM Server e MemoryRouter verificou
-  os títulos e uma única opção ativa em cada rota. Também conferiu no `App.tsx`
-  as duas rotas e o redirecionamento de `/` com `replace`.
-- Limitações: sem validação visual em navegador ou teste de navegação ponta a
-  ponta. A tentativa inicial de verificação com Vite SSR falhou por restrição
-  de abertura de porta e carregamento CommonJS; foi substituída pelo script
-  de renderização sem servidor, concluído com sucesso.
-
-## Listagem paginada de autorizações — 13/11/2026
+## Listagem paginada de autorizações
 
 - Tarefa: tabela paginada em /autorizacoes e criação em modal, consistente com
   o layout azul existente, preservando a integração POST já presente no workspace.
@@ -90,10 +37,7 @@ atividades ao frontend apenas para preencher este documento.
 - Limitação: não foi realizada inspeção visual nem teste ponta a ponta em navegador.
 - Orientações: escopo limitado às autorizações, português, camadas existentes,
   sem bibliotecas novas e sem alterar operações de portabilidade. Alterações locais
-  preexistentes foram preservadas. README atualizado com uso e contrato JSON.
-- Execução: primeira tentativa Maven foi bloqueada pelo sandbox no cache .m2;
-  repetição com permissão de execução ampliada concluiu os testes. Maven emitiu
-  avisos HTTP 401 para metadados de repositórios externos, sem impedir o build.
+  preexistentes foram preservadas.
 
 ## Refatoração de Autorizações com Material UI
 
@@ -116,7 +60,31 @@ atividades ao frontend apenas para preencher este documento.
   O build inicial identificou propriedades incompatíveis com MUI 9; corrigidas
   antes do build final. Vite avisou sobre bundle maior que 500 kB.
 
-## Formulário de operações de portabilidade — 14/11/2026
+## Operações de Portabilidade
+
+- Ferramenta: Codex, para inspeção do contrato Java, implementação e validação.
+- Solicitação: primeira versão de `/operacoes` com MUI Data Grid Community,
+  paginação no servidor e estados de consulta, seguindo Autorizações.
+- Orientações: preservar Autorizações, backend e Central; nenhuma biblioteca
+  adicional, criação, formulário, trilha de eventos ou atualização automática.
+- Contrato conferido em OperacaoController, OperacaoPaginaDTO e
+  OperacaoRespostaDTO: parâmetros `pagina` (zero inicial) e `tamanho` (1–100),
+  envelope com `conteudo` e totais; registros só têm `protocolo` e `status`.
+- Resultado: cliente HTTP e tipos próprios, protocolo como identificador,
+  cancelamento de consultas antigas, tamanhos 10/25/50/100, retorno à página zero
+  ao mudar tamanho, loading, vazio, erro e nova tentativa. Status com Chip;
+  botão Nova operação desabilitado e coluna Ações sem controles.
+- Limitação apresentada ao usuário: beneficiário e data de criação ausentes
+  no DTO. Colunas mantidas com “Não informado” e aviso explícito na tela.
+  Solicitada preferência à desenvolvedora; nenhuma revisão humana concluída registrada.
+- Validações: build (inclui TypeScript) e lint passaram. Script temporário com
+  fetch simulado verificou parâmetros, AbortSignal, leitura do DTO, falhas HTTP
+  400/500/503 e falha de rede. Não equivale a teste com backend real.
+- Integração real: tentativa de GET em localhost:8080 falhou por conexão recusada;
+  serviço não disponível. Sem validação visual ou ponta a ponta em navegador.
+  Vite avisou sobre bundle acima de 500 kB.
+
+## Formulário de operações de portabilidade
 
 - Solicitação: modal Material UI aberto por Nova operação, consulta de agenda,
   seleção múltipla e total, conta de destino e criação com idempotência.
@@ -143,38 +111,11 @@ atividades ao frontend apenas para preencher este documento.
   integração real, inspeção visual ou teste ponta a ponta em navegador.
   Revisão humana ainda não registrada para esta implementação.
 
-
-## Adaptação da listagem ao banco local — 14/11/2026
-
-- Ferramenta: Codex para inspeção, implementação e validação.
-- Aprovação humana: proposta aprovada antes de editar; usuário determinou
-  “Aguardando envio” somente quando `statusOperacao` for nulo e a integração
-  estiver `PENDENTE_ENVIO`, e “Não informado” nos outros casos nulos.
-- Contrato conferido no backend: `StatusOperacao` contém `PENDENTE`, `CONFIRMADA`,
-  `REJEITADA` e `FALHA_TECNICA`, compatíveis com o tipo TypeScript já existente.
-  `StatusIntegracao` contém `PENDENTE_ENVIO`, `ENVIADA`, `FALHA_ENVIO` e
-  `ENVIO_INDETERMINADO`.
-- Implementação: tipo `OperacaoListagem` separado de `OperacaoResposta` da
-  criação, campos anuláveis explícitos e `OperacoesPagina` adaptado. DataGrid
-  identifica linhas por `id` e apresenta protocolo opcional e dois status com
-  Chips e rótulos em português. Nenhum filtro exclui falhas de integração.
-- Preservados layout, paginação no servidor, cancelamento, loading, vazio,
-  erro/nova tentativa e formulário de criação. Backend e Central não alterados;
-  sem polling nem novas dependências. README atualizado.
-- Testes HTTP ampliados com paginação, IDs locais, todas as situações de
-  integração, campos nulos, vazio, erro HTTP e erro de rede. Os testes existentes
-  de agenda e criação foram preservados.
-- Validação: `npm run build --prefix frontend` e `npm run lint --prefix frontend`
-  passaram; `node --test frontend/tests/*.test.mjs`: oito testes passaram,
-  zero falhas. `git diff --check` passou. Vite avisou sobre chunk acima de 500 kB.
-- Limitações: testes HTTP usam fetch simulado; sem teste visual ou ponta a ponta
-  em navegador. Revisão humana final ainda não registrada.
-
-## Polling de status das operações — 14/11/2026
+## Polling de status das operações
 
 - Ferramenta: Codex para análise do React, serviço Java, contrato HTTP e ADRs,
   implementação do frontend, testes e documentação.
-- Aprovação humana: proposta aprovada antes das alterações. O usuário ajustou
+- Aprovação humana: proposta aprovada antes das alterações. A desenvolvedora ajustou
   a elegibilidade para protocolo presente e status PENDENTE ou nulo; determinou
   que FALHA_TECNICA encerre apenas o polling automático e que aborts não apareçam
   como erros. Backend e Central não devem ser alterados.
@@ -200,22 +141,15 @@ atividades ao frontend apenas para preencher este documento.
   `npm run lint --prefix frontend` passaram; `git diff --check` passou.
   Node emitiu aviso de API experimental para MockTimers.
 
-## Falha de autenticação na integração — 14/11/2026
+## Falha de autenticação na integração
 
 - Ferramenta: Codex. Orientação: alterações pontuais, preservar HMAC, transações,
   auditoria e idempotência; não expor dados sensíveis nem adicionar reenvio.
 - Nenhum arquivo de produção do frontend alterado nesta tarefa.
 - Contrato do backend para falha de autenticação entre serviços documentado:
   HTTP 502 com mensagem sanitizada em ProblemDetail.detail.
-- Revisão humana final ainda não registrada.
 
-## Escopo do retry do backend — 14/11/2026
-
-- Codex implementou retry apenas no backend. Nenhuma alteração no frontend ou
-  contrato HTTP foi realizada nesta tarefa. Testes de frontend não executados.
-  Revisão humana ainda não registrada.
-
-## Finalização do frontend — 15/11/2026
+## Finalização do frontend
 
 - Ferramenta: Codex. Solicitação: histórico por operação, revisão pontual de erros,
   polling, usabilidade e testes, preservando arquitetura, contratos e português.

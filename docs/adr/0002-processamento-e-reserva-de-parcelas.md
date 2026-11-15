@@ -1,42 +1,52 @@
-# 0002 — Processamento e reserva de parcelas
-
-Status: aprovada pelo usuário nesta sessão; implementada.
+# ADR-0002 — Processamento e reserva de parcelas
 
 ## Contexto
 
-A unicidade global de parcela em operacoes_parcelas impede nova tentativa após
-rejeição. Remover vínculos perderia o histórico e quebraria a comparação de
-conteúdo para idempotência. A V5 existente já permite os estados finais.
+Na Central de Convênios, uma parcela pode fazer parte de diferentes tentativas de portabilidade, desde que não esteja reservada por outra operação ativa.
+Inicialmente, a tabela `operacoes_parcelas` possuía uma restrição de unicidade por parcela. Isso impedia que uma parcela fosse utilizada novamente após a rejeição de uma operação.
+Remover o vínculo da parcela com a operação rejeitada resolveria a restrição, mas causaria perda de histórico e poderia comprometer a validação de idempotência.
+Também era necessário garantir que duas operações concorrentes não conseguissem reservar a mesma parcela.
 
 ## Decisão
 
-Manter @ElementCollection e operacoes_parcelas como histórico imutável de IDs.
-Substituir a unicidade global por uma tabela de reservas ativas, com parcela
-como chave única e referência ao vínculo histórico da operação. Preencher a
-reserva a partir dos vínculos existentes de operações pendentes/confirmadas.
-Criar e liberar reservas na mesma transação que altera a operação; confirmação
-mantém a reserva e rejeição a libera. A agenda deve excluir reservas ativas.
+Manter a tabela `operacoes_parcelas` como histórico das parcelas vinculadas a cada operação e criar uma tabela separada para controlar as reservas ativas.
+Cada parcela pode possuir apenas uma reserva ativa, garantindo que não seja utilizada simultaneamente em operações diferentes.
+As reservas seguem as seguintes regras:
+- Ao registrar uma operação, suas parcelas são reservadas.
+- Quando a operação é confirmada, as reservas são mantidas.
+- Quando a operação é rejeitada, as reservas são liberadas.
+- A consulta da agenda considera disponíveis apenas as parcelas que atendem às regras de negócio e não possuem reserva ativa.
+O processamento das operações é realizado de forma assíncrona, por meio de um agendador `@Scheduled`, com intervalo e atraso mínimo configuráveis.
+Para evitar problemas de concorrência, cada operação é processada em sua própria transação, utilizando bloqueio pessimista e revalidação dos dados antes da confirmação.
+Durante o processamento, são verificadas as condições das parcelas, a data do desconto e a autorização do beneficiário para o convênio.
+Se alguma regra de negócio não for atendida, a operação é rejeitada com o motivo correspondente.
+As operações que já possuem status final não são processadas novamente.
 
-Executar um serviço de processamento diretamente invocável e um agendador
-@Scheduled com intervalo e atraso mínimo configuráveis. Cada operação será
-bloqueada pessimisticamente e revalidada dentro de transação própria, incluindo
-parcelas bloqueadas em ordem de ID. Revalidar beneficiário, status disponível,
-data de desconto >= hoje UTC e autorização ativa por convênio. Confirmar se
-válida; caso contrário rejeitar com motivo. Operações finalizadas não sofrem
-novas transições. POST e GET não chamam o processador.
+## Justificativa
+
+A separação entre histórico e reservas permite manter o vínculo original das parcelas com cada operação, sem impedir novas tentativas após uma rejeição.
+O controle das reservas pelo banco de dados evita que operações concorrentes utilizem a mesma parcela.
+O processamento assíncrono também permite que o registro da portabilidade seja concluído sem aguardar sua confirmação.
+O uso de transações independentes por operação evita que uma falha no processamento de uma solicitação comprometa as demais.
+
+## Alternativas consideradas
+
+**Manter a unicidade na tabela de histórico:** impediria novas tentativas de portabilidade para parcelas vinculadas a operações rejeitadas.
+**Remover os vínculos após a rejeição:** permitiria reutilizar as parcelas, mas causaria perda de histórico e prejudicaria a idempotência.
+**Transformar os vínculos em entidades próprias:** permitiria controlar mais informações por vínculo, mas aumentaria a complexidade do modelo sem necessidade para o cenário atual.
 
 ## Consequências
 
-Preserva o contrato do POST, histórico e idempotência após finalização, sem
-converter a coleção de IDs em entidade. Exige migração incremental das reservas
-e testes reais de concorrência, rollback e integridade. V7 migra reservas
-existentes e aplica PK por parcela e FK composta para o vínculo histórico.
-O estado DISPONIVEL de parcelas não é duplicado por estados de reserva: a
-consulta da agenda deriva a disponibilidade da ausência de reserva ativa.
+**Positivas:**
 
-O processamento seleciona lotes de até 100, bloqueia cada operação antes de
-reavaliar estado/idade e usa REQUIRES_NEW por operação. Leitura de autorizações
-usa lock compartilhado para impedir revogação durante a confirmação. Erros
-técnicos deixam a operação pendente por rollback e são registrados; não são
-tratados como rejeição de negócio. O agendador pode ser desabilitado sem impedir
-chamadas diretas ao serviço de processamento nos testes.
+- Preservação do histórico das parcelas em todas as operações.
+- Possibilidade de reutilizar parcelas após a rejeição.
+- Controle de concorrência para evitar reservas duplicadas.
+- Manutenção da idempotência mesmo após a finalização das operações.
+- Processamento independente das solicitações.
+
+**Negativas:**
+
+- Necessidade de uma tabela adicional para controlar reservas.
+- Maior complexidade nas transações e no tratamento de concorrência.
+- Necessidade de testes de integração para validar bloqueios, rollback e integridade dos dados.
