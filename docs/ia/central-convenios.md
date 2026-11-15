@@ -445,3 +445,12 @@ preservadas para manter o contexto, sem alterar os ADRs.
 - `OperacaoIntegracaoTest.deveCriarOperacaoComVinculosEConta`: espera 2 campos JSON,
   recebe 4. `deveValidarListaCamposEHeader`: espera HTTP 400, recebe 500 na linha 139.
   Falhas fora do código modificado; mantidas para revisão humana, ainda não registrada.
+
+## Finalização do frontend — 15/11/2026
+
+- Trabalho do Codex restrito ao frontend e documentação; Central não alterada.
+- Interface distingue falha entre serviços (502) de autenticação/permissão do
+  usuário (401/403), respeitando o contrato do Portal.
+- Testes da Central não executados nesta tarefa; testes com serviços reais não
+  realizados. Resultados do frontend em [frontend.md](frontend.md).
+  Revisão humana final ainda não registrada.

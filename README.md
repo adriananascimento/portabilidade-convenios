@@ -312,7 +312,8 @@ com Chips no padrão visual existente. Quando o status da operação é nulo,
 mostra “Aguardando envio” se a integração estiver em `PENDENTE_ENVIO` e
 “Não informado” nos demais casos. Protocolo nulo aparece como “Não informado”.
 Operações com falha de integração também são exibidas. O formulário de criação
-mantém seu contrato com `protocolo` e `status`; não há polling.
+mantém seu contrato com `protocolo` e `status`. O acompanhamento automático é
+descrito em [frontend/README.md](frontend/README.md#acompanhamento-automático-de-operações).
 
 Clique em **Nova operação**, informe o beneficiário e use **Consultar parcelas**.
 Selecione as parcelas disponíveis, confira o total e preencha banco, agência e
@@ -320,15 +321,17 @@ conta de destino. **Solicitar portabilidade** envia `POST /api/operacoes` com
 `beneficiarioId`, `parcelasIds` e `contaDestino`, além de `Idempotency-Key` UUID.
 A consulta usa `GET /api/beneficiarios/{beneficiarioId}/agenda`.
 
-Em caso de falha de comunicação, reenviar sem editar mantém a mesma chave, pois
-a Central pode já ter criado a operação. Alterar dados ou abrir uma nova operação
+Em caso de falha de comunicação, consulte a listagem para acompanhar o resultado,
+pois a operação pode ter sido criada. A chave permanece a mesma enquanto os dados
+não são editados no modal. Não há ação de reenvio manual de operações registradas. Alterar dados ou abrir uma nova operação
 inicia uma nova tentativa lógica. A chave é mantida somente enquanto o modal
 permanece aberto; fechar ou recarregar a página perde essa referência.
 Após o aceite, o modal mostra protocolo e status. HTTP 202 significa aceite para
 processamento assíncrono. Clique em **Confirmar** para fechar e atualizar a primeira
-página da listagem. Não há polling ou consulta de eventos nesta etapa.
+página da listagem. A listagem acompanha automaticamente os status elegíveis
+a cada 10 segundos e oferece **Ver histórico** para cada operação.
 
-Testes do cliente HTTP, sem dependências adicionais:
+Testes do cliente HTTP:
 
 ```bash
 node --test frontend/tests/operacoesApi.test.mjs
@@ -362,7 +365,7 @@ Quando o envio recebe HTTP 401 da Central, a API retorna 502 com a mensagem
 registrada, sem reenvio ou novos eventos, seguindo o retorno 503 descrito acima.
 `PENDENTE_ENVIO` e `ENVIO_INDETERMINADO` podem ficar paradas após falhas ou
 reinicialização. Recuperação com retry e backoff será implementada posteriormente.
-Não há polling, auditoria ou retry automático. A listagem consulta exclusivamente o banco local com `Pageable`, por
+A listagem consulta exclusivamente o banco local com `Pageable`, por
 `dataCriacao DESC, id DESC`, inclusive registros sem protocolo. Os parâmetros
 `pagina` (padrão 0) e `tamanho` (padrão 10, entre 1 e 100), suas validações e os
 metadados da página foram preservados. Não há sincronização de status durante
@@ -398,6 +401,32 @@ cd backend
 aplicação ao acontecimento são nulos. Ordem: `dataCriacao ASC, id ASC`.
 Operação inexistente retorna 404; operação existente sem eventos retorna `[]`.
 
+No frontend, **Ver histórico** abre um modal com data/hora em pt-BR no fuso do
+navegador, tipo amigável, descrição e transições de integração e operação quando
+presentes. A exibição ordena os eventos do mais recente para o mais antigo sem
+alterar a ordem da API; empates preservam a ordem recebida. Há carregamento,
+lista vazia, erro e nova tentativa. Fechar ou sair da tela cancela a consulta.
+Não são exibidos corpos HTTP, stack traces ou metadados internos da integração.
+
+Os fluxos de operações, agenda e autorizações distinguem dados inválidos,
+autenticação/permissão do usuário, conflito, falha entre serviços, indisponibilidade,
+timeout e falha de rede. Mensagens públicas conhecidas de `ProblemDetail.detail`
+são reaproveitadas; outros detalhes usam textos locais. Campos e seleção do
+formulário são preservados após falha de criação. Aceite para processamento não
+é apresentado como portabilidade concluída.
+
+Validação do frontend (Node.js 22.21.1 utilizado):
+
+```bash
+npm test --prefix frontend
+npm run build --prefix frontend
+npm run lint --prefix frontend
+```
+
+Os testes de interface usam React Testing Library e JSDOM apenas em desenvolvimento;
+os demais exercitam HTTP e polling com fetch e temporizadores simulados. Não
+substituem integração com os serviços reais nem inspeção visual em navegador.
+
 A migration V3 é aplicada pelo Flyway na inicialização habitual. Os eventos são
 somente acrescentados durante o fluxo normal e compartilham a transação da
 alteração local correspondente. Repetições idempotentes não geram novos eventos.
@@ -425,7 +454,8 @@ protocolo ou conflito concorrente não resolvido, 504 para timeout, 503 para Cen
 indisponível, 502 para resposta/transição inválida ou protocolo remoto inexistente,
 e 500 para falha local na persistência da atualização. Falhas preservam o último
 status conhecido e não mudam `statusIntegracao`. Timeouts efetivos do cliente:
-3 segundos para conectar e 5 para ler. Não há polling, retry ou agendamento.
+3 segundos para conectar e 5 para ler. O endpoint não agenda consultas nem executa retry. O frontend realiza o polling
+automático descrito em [frontend/README.md](frontend/README.md#acompanhamento-automático-de-operações).
 Detalhes: [ADR-0009](docs/adr/0009-sincronizacao-manual-status.md).
 
 

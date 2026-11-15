@@ -1,3 +1,4 @@
+import {mensagemErro} from '../api/errosApi'
 import {useState} from 'react'
 import type {SubmitEvent} from 'react'
 import {Alert, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Stack, TextField} from '@mui/material'
@@ -31,8 +32,8 @@ export function AutorizacaoForm({aberto, onCancelar, onSucesso}: Props) {
       setBeneficiarioId('')
       setConvenioId('')
       onSucesso()
-    } catch {
-      setErro('Não foi possível registrar a autorização. Tente novamente.')
+    } catch (falha) {
+      setErro(mensagemErro(falha, 'Não foi possível registrar a autorização. Tente novamente.'))
     } finally {
       setCarregando(false)
     }

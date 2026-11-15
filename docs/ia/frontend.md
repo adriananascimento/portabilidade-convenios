@@ -214,3 +214,49 @@ atividades ao frontend apenas para preencher este documento.
 - Codex implementou retry apenas no backend. Nenhuma alteração no frontend ou
   contrato HTTP foi realizada nesta tarefa. Testes de frontend não executados.
   Revisão humana ainda não registrada.
+
+## Finalização do frontend — 15/11/2026
+
+- Ferramenta: Codex. Solicitação: histórico por operação, revisão pontual de erros,
+  polling, usabilidade e testes, preservando arquitetura, contratos e português.
+  Sem reenvio manual, atualização de conta ou funcionalidades adicionais.
+- Contratos inspecionados: EventoOperacaoRespostaDTO, TipoEventoOperacao,
+  OperacaoController, GlobalExceptionHandler, criação e sincronização Java.
+  Não houve alteração de backend ou Central.
+- Implementação: ação Ver histórico pelo UUID local e Dialog Material UI com
+  consulta cancelável, eventos mais recentes primeiro, descrição, data/hora pt-BR,
+  nomes amigáveis e transições de integração/operação. Carregamento, vazio, erro
+  e nova tentativa; fechamento por botão, Escape ou clique externo. Empates
+  preservam ordem recebida. Metadados técnicos de integração não são exibidos.
+- Erros: helper HTTP compartilhado para operações, agenda e autorizações;
+  mensagens específicas para 400, 401/403, 409, 502, 503/504 e rede. Somente
+  detalhes públicos conhecidos do backend são aceitos; demais corpos usam
+  mensagens locais. Erros do parser JSON também usam mensagem local.
+  Campos/seleção permanecem após falha de criação. Orientação para acompanhar
+  pela listagem em caso de resultado incerto. Nenhum novo fluxo de reenvio.
+- Usabilidade: rótulos de status compartilhados com formulário e histórico,
+  rejeição/falha técnica com indicação de erro, confirmação de recebimento após
+  criação sem anunciar conclusão da portabilidade. Colunas estáveis na tabela.
+- Polling: solução existente preservada após revisão e testes; ciclos sequenciais
+  de 10 segundos, deduplicação de IDs, somente página carregada e elegíveis,
+  abort na troca de contexto/desmontagem e preservação de dados após falha.
+- Testes: preservados os testes locais preexistentes de HTTP e polling. Adicionados
+  testes de componentes reais com React Testing Library e JSDOM, dependências
+  apenas de desenvolvimento, e loader TypeScript para node:test. Cobertura de
+  abertura/fechamento, ordenação, eventos/transições/datas, carregamento, vazio,
+  erros/reconsulta/cancelamento, status, manutenção dos campos após 502 e ciclo
+  de polling da tela com falha e desmontagem. Script npm test adicionado.
+- Limitações: fetch simulado, sem integração real nem inspeção visual em navegador.
+  Histórico não atualiza sozinho enquanto aberto; reabrir consulta novamente.
+  Revisão humana final ainda não registrada. Não houve decisão arquitetural nova.
+- Validação final: `npm test --prefix frontend` passou com 39 testes, zero falhas;
+  `npm run build --prefix frontend`, `npm run lint --prefix frontend` e
+  `git diff --check` passaram. Node emite aviso experimental de MockTimers.
+  Build mantém aviso de chunk acima de 500 kB (aproximadamente 1,08 MB minificado).
+- Instalação das ferramentas de teste apontou sete alertas moderados no conjunto
+  de dependências. `npm audit --omit=dev --json` retornou zero vulnerabilidades
+  de produção. Atualização ampla das ferramentas fica fora desta entrega.
+  A primeira tentativa de instalação não retornou no sandbox; cancelada e
+  repetida com acesso ampliado, concluída com sucesso.
+- Arquivos locais preexistentes em backend/target, análise técnica e testes
+  foram preservados; o cliente HTTP foi ampliado e os testes de polling mantidos.

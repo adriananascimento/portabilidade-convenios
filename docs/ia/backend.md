@@ -270,3 +270,11 @@ edição são documentais e não substituem testes das aplicações.
   zero falhas, erros ou ignorados; código de saída 0. `git diff --check` passou.
   A suíte da Central foi executada e suas duas falhas estão registradas em
   `docs/ia/central-convenios.md`; nenhum código da Central foi alterado.
+
+## Finalização do frontend — 15/11/2026
+
+- Codex consultou DTO de eventos, enum de tipos, controladores, serviços e handler
+  de erros para implementar o frontend usando contratos reais.
+- Nenhuma alteração no backend nesta tarefa; testes Java não executados.
+- Resultados e limitações dos testes de frontend em [frontend.md](frontend.md).
+  Revisão humana final ainda não registrada.

@@ -43,3 +43,18 @@ export interface CriarOperacaoRequest {
   parcelasIds: string[]
   contaDestino: {banco: string; agencia: string; conta: string}
 }
+
+export type TipoEventoOperacao = 'OPERACAO_CRIADA_LOCALMENTE' | 'TENTATIVA_ENVIO_CENTRAL'
+  | 'PROTOCOLO_RECEBIDO' | 'FALHA_INTEGRACAO' | 'STATUS_OPERACAO_ATUALIZADO' | 'RESULTADO_INDETERMINADO'
+
+export interface EventoOperacao {
+  id: string
+  tipo: TipoEventoOperacao
+  descricao: string | null
+  dataCriacao: string
+  statusIntegracaoAnterior: StatusIntegracao | null
+  statusIntegracaoNovo: StatusIntegracao | null
+  statusOperacaoAnterior: StatusOperacao | null
+  statusOperacaoNovo: StatusOperacao | null
+  protocoloCentral: string | null
+}

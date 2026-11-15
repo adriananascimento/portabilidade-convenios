@@ -5,7 +5,7 @@ Convênios de Desconto em Folha.
 
 ## Execução local
 
-Com Node.js compatível com o Vite instalado, execute neste diretório:
+Com Node.js 22.21.1 ou superior compatível com o Vite instalado, execute neste diretório:
 
 ```sh
 npm ci
@@ -17,6 +17,7 @@ Acesse o endereço informado pelo Vite no terminal.
 ## Validação
 
 ```sh
+npm test
 npm run build
 npm run lint
 ```
@@ -28,7 +29,7 @@ Para servir o resultado localmente, utilize `npm run preview`.
 
 - `/` redireciona para `/autorizacoes`, substituindo a entrada no histórico.
 - `/autorizacoes` lista autorizações e permite cadastrar pelo formulário em modal.
-- `/operacoes` apresenta o título e a descrição de Operações.
+- `/operacoes` lista operações, permite solicitar portabilidade e consultar o histórico.
 
 O layout compartilhado está em `src/layouts/BaseLayout.tsx` e as páginas em
 `src/pages/`. O React Router controla a navegação e a indicação da opção ativa.
@@ -69,8 +70,9 @@ respostas tardias. A proteção contra duplicidade vale por instância da tela;
 abas distintas podem consultar a mesma operação. Cancelar o fetch não garante
 interromper processamento já iniciado no servidor.
 
-Os testes HTTP e do controlador de polling usam `node:test`, fetch simulado e
-temporizadores simulados, sem dependências adicionais:
+Os testes usam `node:test`, fetch e temporizadores simulados. Os testes de
+interface montam os componentes reais com React Testing Library e JSDOM,
+instalados somente como dependências de desenvolvimento:
 
 ```sh
 node --test frontend/tests/*.test.mjs
@@ -78,3 +80,32 @@ node --test frontend/tests/*.test.mjs
 
 Execute esse comando na raiz do repositório. Os testes não substituem validação
 visual ou integração real com o backend.
+
+
+## Histórico e mensagens
+
+A ação **Ver histórico** em cada linha consulta `GET /api/operacoes/{id}/eventos`
+pelo ID local. O Dialog reutiliza Material UI e oferece fechamento pelo botão,
+Escape e clique externo, contenção/restauração de foco e rolagem em telas menores.
+Apresenta eventos em ordem decrescente de data (empates preservam ordem da API),
+nomes amigáveis, descrição e status anterior/novo quando presentes. Datas usam
+pt-BR no fuso do navegador. Carregamento, vazio e erro têm mensagens próprias;
+a nova tentativa é apenas de consulta. A requisição é cancelada ao fechar.
+
+Os erros HTTP 400, 401/403, 409, 502 e 503/504 têm mensagens específicas, além
+de falhas de rede. Somente mensagens públicas conhecidas do backend são
+reaproveitadas; detalhes desconhecidos e corpos técnicos são substituídos.
+Novas mensagens públicas precisam ser revisadas em `src/api/errosApi.ts`.
+Os tipos de eventos e campos seguem `EventoOperacaoRespostaDTO` e
+`TipoEventoOperacao` do backend.
+
+Falhas de envio preservam os campos e a seleção. O retorno de criação exibe
+protocolo e status amigável; a confirmação atualiza a primeira página e mostra
+um aviso de recebimento para processamento. Isso não comprova conclusão da
+portabilidade. Não foi adicionado reenvio manual.
+
+Limitações: histórico é atualizado ao abrir ou tentar novamente; não possui
+polling próprio nem paginação porque o endpoint retorna lista. Não houve
+inspeção visual em navegador nem integração com serviços reais nesta etapa.
+Melhorias futuras: validação ponta a ponta e avaliação da divisão do bundle
+(o build atual avisa sobre chunk acima de 500 kB).

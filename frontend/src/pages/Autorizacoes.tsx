@@ -1,3 +1,4 @@
+import {mensagemErro} from '../api/errosApi'
 import {useEffect, useState} from 'react'
 import {Alert, Box, Button, Chip, Stack, Typography} from '@mui/material'
 import {createTheme, ThemeProvider} from '@mui/material/styles'
@@ -48,9 +49,9 @@ export function Autorizacoes() {
       setDados(resposta)
       setErro('')
       setCarregando(false)
-    }).catch(() => {
+    }).catch((falha: unknown) => {
       if (!controle.signal.aborted) {
-        setErro('Não foi possível carregar as autorizações. Tente novamente.')
+        setErro(mensagemErro(falha, 'Não foi possível carregar as autorizações. Tente novamente.'))
         setCarregando(false)
       }
     })

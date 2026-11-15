@@ -1,4 +1,7 @@
-import {useEffect, useRef, useState} from 'react'
+import {coresStatus, rotulosStatus, integracoes} from '../components/statusOperacao'
+import {HistoricoOperacao} from '../components/HistoricoOperacao'
+import {mensagemErro} from '../api/errosApi'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {Alert, Box, Button, Chip, Stack, Typography} from '@mui/material'
 import {createTheme, ThemeProvider} from '@mui/material/styles'
 import {DataGrid, type GridColDef, type GridPaginationModel} from '@mui/x-data-grid'
@@ -6,7 +9,7 @@ import {ptBR} from '@mui/x-data-grid/locales'
 import {OperacaoForm} from '../components/OperacaoForm'
 import {listarOperacoes, sincronizarStatusOperacao} from '../api/operacoesApi'
 import {atualizarOperacao, iniciarPollingOperacoes} from '../polling/pollingOperacoes'
-import type {OperacaoListagem, OperacoesPagina, StatusIntegracao, StatusOperacao} from '../types/operacao'
+import type {OperacaoListagem, OperacoesPagina} from '../types/operacao'
 
 const tema = createTheme({
   palette: {
@@ -19,18 +22,6 @@ const tema = createTheme({
   shape: {borderRadius: 8},
 })
 
-const coresStatus: Record<StatusOperacao, 'warning' | 'success' | 'error'> = {
-  PENDENTE: 'warning', CONFIRMADA: 'success', REJEITADA: 'error', FALHA_TECNICA: 'error',
-}
-const rotulosStatus: Record<StatusOperacao, string> = {
-  PENDENTE: 'Pendente', CONFIRMADA: 'Confirmada', REJEITADA: 'Rejeitada', FALHA_TECNICA: 'Falha técnica',
-}
-const integracoes: Record<StatusIntegracao, {rotulo: string; cor: 'warning' | 'success' | 'error'}> = {
-  PENDENTE_ENVIO: {rotulo: 'Pendente de envio', cor: 'warning'},
-  ENVIADA: {rotulo: 'Enviada', cor: 'success'},
-  FALHA_ENVIO: {rotulo: 'Falha no envio', cor: 'error'},
-  ENVIO_INDETERMINADO: {rotulo: 'Envio indeterminado', cor: 'warning'},
-}
 const colunas: GridColDef<OperacaoListagem>[] = [
   {
     field: 'protocoloCentral', headerName: 'Protocolo na Central', flex: 1.5, minWidth: 310,
@@ -53,11 +44,12 @@ const colunas: GridColDef<OperacaoListagem>[] = [
       : rotulosStatus[row.statusOperacao]} size="small"
       color={row.statusOperacao === null ? 'default' : coresStatus[row.statusOperacao]} variant="outlined" />,
   },
-  {field: 'acoes', headerName: 'Ações', minWidth: 100, renderCell: () => null},
 ]
 const identificarOperacao = (operacao: OperacaoListagem) => operacao.id
 
 export function Operacoes() {
+  const [historicoId, setHistoricoId] = useState<string | null>(null)
+  const [sucesso, setSucesso] = useState('')
   const [formularioAberto, setFormularioAberto] = useState(false)
   const [paginacao, setPaginacao] = useState<GridPaginationModel>({page: 0, pageSize: 10})
   const [revisao, setRevisao] = useState(0)
@@ -66,6 +58,11 @@ export function Operacoes() {
   const [erro, setErro] = useState('')
   const [avisoPolling, setAvisoPolling] = useState('')
   const controleAtual = useRef<AbortController | null>(null)
+  const colunasComHistorico = useMemo<GridColDef<OperacaoListagem>[]>(() => [...colunas, {
+    field: 'acoes', headerName: 'Ações', minWidth: 150,
+    renderCell: ({row}) => <Button onClick={() => setHistoricoId(row.id)}
+      aria-label={`Ver histórico da operação ${row.id}`}>Ver histórico</Button>,
+  }], [])
 
   useEffect(() => {
     const controle = new AbortController()
@@ -90,7 +87,7 @@ export function Operacoes() {
         setCarregando(false)
         return
       }
-      setErro('Não foi possível carregar as operações. Tente novamente.')
+      setErro(mensagemErro(falha, 'Não foi possível carregar as operações. Tente novamente.'))
       setCarregando(false)
     })
     return () => controle.abort()
@@ -117,6 +114,7 @@ export function Operacoes() {
           <Button variant="contained" onClick={() => setFormularioAberto(true)} sx={{flexShrink: 0}}>Nova operação</Button>
         </Stack>
 
+        {sucesso && <Alert severity="success" role="status" sx={{mb: 2}}>{sucesso}</Alert>}
         {erro && <Alert severity="error" sx={{mb: 2}} action={<Button color="inherit" onClick={() => atualizar()}>Tentar novamente</Button>}>{erro}</Alert>}
         {avisoPolling && <Alert severity="warning" sx={{mb: 2}}>{avisoPolling}</Alert>}
 
@@ -125,7 +123,7 @@ export function Operacoes() {
           <DataGrid
             aria-label="Operações realizadas"
             rows={dados?.conteudo ?? []}
-            columns={colunas}
+            columns={colunasComHistorico}
             getRowId={identificarOperacao}
             loading={carregando}
             rowCount={dados?.totalElementos ?? 0}
@@ -141,7 +139,9 @@ export function Operacoes() {
             sx={{'& .MuiDataGrid-columnHeaders': {'--DataGrid-containerBackground': '#f4f7fb'}}}
           />
         </Box>
+        {historicoId && <HistoricoOperacao key={historicoId} id={historicoId} onFechar={() => setHistoricoId(null)} />}
         {formularioAberto && <OperacaoForm onCancelar={() => setFormularioAberto(false)} onSucesso={() => {
+          setSucesso('Solicitação recebida para processamento. Acompanhe o resultado na listagem.')
           setFormularioAberto(false)
           atualizar({...paginacao, page: 0})
         }} />}

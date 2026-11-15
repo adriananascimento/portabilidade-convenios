@@ -1,3 +1,5 @@
+import {rotulosStatus} from './statusOperacao'
+import {mensagemErro} from '../api/errosApi'
 import {useEffect, useRef, useState, type SubmitEvent} from 'react'
 import {Alert, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography} from '@mui/material'
 import {consultarAgenda, criarOperacao} from '../api/operacoesApi'
@@ -44,7 +46,7 @@ export function OperacaoForm({onCancelar, onSucesso}: Props) {
       const resposta = await consultarAgenda(beneficiarioId.trim(), controle.signal)
       if (!controle.signal.aborted) setAgenda(resposta)
     } catch (falha) {
-      if (!controle.signal.aborted) setErro(falha instanceof Error ? falha.message : 'Não foi possível consultar as parcelas.')
+      if (!controle.signal.aborted) setErro(mensagemErro(falha, 'Não foi possível consultar as parcelas.'))
     } finally {
       if (!controle.signal.aborted) setConsultando(false)
     }
@@ -73,8 +75,8 @@ export function OperacaoForm({onCancelar, onSucesso}: Props) {
       setResultado(await criarOperacao(dados, chave.current))
     } catch (falha) {
       setErro(falha instanceof Error && !(falha instanceof TypeError)
-        ? falha.message
-        : 'Falha de comunicação. A operação pode ter sido criada. Reenvie sem alterar os dados para reutilizar a mesma chave.')
+        ? mensagemErro(falha, 'Não foi possível confirmar o recebimento. Consulte a listagem para acompanhar o resultado.')
+        : 'Falha de comunicação. A operação pode ter sido criada. Consulte a listagem para acompanhar o resultado.')
     } finally {
       envioEmAndamento.current = false
       setEnviando(false)
@@ -95,8 +97,8 @@ export function OperacaoForm({onCancelar, onSucesso}: Props) {
       <form onSubmit={solicitar} aria-busy={enviando}>
         <DialogTitle id="titulo-nova-operacao">Nova operação</DialogTitle>
         <DialogContent>
-          {resultado ? <Alert severity="success">
-            Solicitação aceita para processamento. Protocolo: {resultado.protocolo}. Status: {resultado.status}.
+          {resultado ? <Alert severity={resultado.status === 'REJEITADA' || resultado.status === 'FALHA_TECNICA' ? 'error' : 'success'} role="status">
+            Solicitação aceita para processamento. Protocolo: {resultado.protocolo}. Status: {rotulosStatus[resultado.status]}.
             A aceitação não significa que a portabilidade foi concluída.
           </Alert> : <Stack spacing={3} sx={{pt: 1}}>
             <Typography variant="h6" component="h2">Beneficiário</Typography>
